@@ -188,6 +188,7 @@ class BaseCallData : public Activity, private Wakeable {
   std::string ActivityDebugTag(WakeupMask) const override { return DebugTag(); }
 
   void Finalize(const grpc_call_final_info* final_info) {
+    ScopedContext ctx(this);
     finalization_.Run(final_info);
   }
 
@@ -738,7 +739,8 @@ class ServerCallData : public BaseCallData {
   struct SendInitialMetadata;
 
   // Shut things down when the call completes.
-  void Completed(grpc_error_handle error, Flusher* flusher);
+  void Completed(grpc_error_handle error, bool tarpit_cancellation,
+                 Flusher* flusher);
   // Construct a promise that will "call" the next filter.
   // Effectively:
   //   - put the modified initial metadata into the batch being sent up.
