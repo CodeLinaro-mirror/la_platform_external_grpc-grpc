@@ -4,7 +4,6 @@
   {
     "deps": [
       "gpr", 
-      "gpr_test_util", 
       "grpc", 
       "grpc_test_util"
     ], 
@@ -21,7 +20,8 @@
   {
     "deps": [
       "gpr", 
-      "gpr_test_util"
+      "grpc_test_util_unsecure", 
+      "grpc_unsecure"
     ], 
     "headers": [], 
     "is_filegroup": false, 
@@ -36,7 +36,6 @@
   {
     "deps": [
       "gpr", 
-      "gpr_test_util", 
       "grpc", 
       "grpc_test_util"
     ], 
@@ -53,7 +52,6 @@
   {
     "deps": [
       "gpr", 
-      "gpr_test_util", 
       "grpc", 
       "grpc_test_util"
     ], 
@@ -70,7 +68,6 @@
   {
     "deps": [
       "gpr", 
-      "gpr_test_util", 
       "grpc", 
       "grpc_test_util"
     ], 
@@ -87,7 +84,8 @@
   {
     "deps": [
       "gpr", 
-      "gpr_test_util"
+      "grpc_test_util_unsecure", 
+      "grpc_unsecure"
     ], 
     "headers": [], 
     "is_filegroup": false, 
@@ -102,8 +100,8 @@
   {
     "deps": [
       "gpr", 
-      "gpr_test_util", 
-      "grpc"
+      "grpc", 
+      "grpc_test_util"
     ], 
     "headers": [], 
     "is_filegroup": false, 
@@ -118,7 +116,6 @@
   {
     "deps": [
       "gpr", 
-      "gpr_test_util", 
       "grpc", 
       "grpc_test_util", 
       "test_tcp_server"
@@ -166,7 +163,6 @@
   {
     "deps": [
       "gpr", 
-      "gpr_test_util", 
       "grpc", 
       "grpc_test_util"
     ], 
@@ -183,7 +179,6 @@
   {
     "deps": [
       "gpr", 
-      "gpr_test_util", 
       "grpc", 
       "grpc_test_util"
     ], 
@@ -215,7 +210,6 @@
   {
     "deps": [
       "gpr", 
-      "gpr_test_util", 
       "grpc", 
       "grpc_test_util"
     ], 
@@ -232,7 +226,6 @@
   {
     "deps": [
       "gpr", 
-      "gpr_test_util", 
       "grpc", 
       "grpc_test_util"
     ], 
@@ -249,7 +242,6 @@
   {
     "deps": [
       "gpr", 
-      "gpr_test_util", 
       "grpc", 
       "grpc_test_util"
     ], 
@@ -266,7 +258,6 @@
   {
     "deps": [
       "gpr", 
-      "gpr_test_util", 
       "grpc", 
       "grpc_test_util"
     ], 
@@ -283,7 +274,23 @@
   {
     "deps": [
       "gpr", 
-      "gpr_test_util", 
+      "grpc", 
+      "grpc_test_util"
+    ], 
+    "headers": [], 
+    "is_filegroup": false, 
+    "language": "c", 
+    "name": "close_fd_test", 
+    "src": [
+      "test/core/bad_connection/close_fd_test.cc"
+    ], 
+    "third_party": false, 
+    "type": "target"
+  }, 
+  {
+    "deps": [
+      "gpr", 
+      "grpc", 
       "grpc_test_util"
     ], 
     "headers": [], 
@@ -299,7 +306,6 @@
   {
     "deps": [
       "gpr", 
-      "gpr_test_util", 
       "grpc", 
       "grpc_test_util"
     ], 
@@ -316,7 +322,6 @@
   {
     "deps": [
       "gpr", 
-      "gpr_test_util", 
       "grpc", 
       "grpc_test_util"
     ], 
@@ -333,7 +338,6 @@
   {
     "deps": [
       "gpr", 
-      "gpr_test_util", 
       "grpc", 
       "grpc_test_util"
     ], 
@@ -350,7 +354,6 @@
   {
     "deps": [
       "gpr", 
-      "gpr_test_util", 
       "grpc", 
       "grpc_test_util"
     ], 
@@ -367,7 +370,6 @@
   {
     "deps": [
       "gpr", 
-      "gpr_test_util", 
       "grpc", 
       "grpc_test_util"
     ], 
@@ -384,7 +386,6 @@
   {
     "deps": [
       "gpr", 
-      "gpr_test_util", 
       "grpc", 
       "grpc_test_util"
     ], 
@@ -401,7 +402,6 @@
   {
     "deps": [
       "gpr", 
-      "gpr_test_util", 
       "grpc", 
       "grpc_test_util"
     ], 
@@ -418,7 +418,6 @@
   {
     "deps": [
       "gpr", 
-      "gpr_test_util", 
       "grpc", 
       "grpc_test_util"
     ], 
@@ -435,7 +434,6 @@
   {
     "deps": [
       "gpr", 
-      "gpr_test_util", 
       "grpc", 
       "grpc_test_util"
     ], 
@@ -452,7 +450,6 @@
   {
     "deps": [
       "gpr", 
-      "gpr_test_util", 
       "grpc", 
       "grpc_test_util"
     ], 
@@ -469,7 +466,6 @@
   {
     "deps": [
       "gpr", 
-      "gpr_test_util", 
       "grpc", 
       "grpc_test_util"
     ], 
@@ -486,7 +482,6 @@
   {
     "deps": [
       "gpr", 
-      "gpr_test_util", 
       "grpc", 
       "grpc_test_util"
     ], 
@@ -503,8 +498,8 @@
   {
     "deps": [
       "gpr", 
-      "gpr_test_util", 
       "grpc", 
+      "grpc_test_util", 
       "transport_security_test_lib"
     ], 
     "headers": [], 
@@ -520,7 +515,6 @@
   {
     "deps": [
       "gpr", 
-      "gpr_test_util", 
       "grpc", 
       "grpc_test_util"
     ], 
@@ -537,7 +531,6 @@
   {
     "deps": [
       "gpr", 
-      "gpr_test_util", 
       "grpc", 
       "grpc_test_util"
     ], 
@@ -554,7 +547,6 @@
   {
     "deps": [
       "gpr", 
-      "gpr_test_util", 
       "grpc", 
       "grpc_test_util"
     ], 
@@ -571,7 +563,6 @@
   {
     "deps": [
       "gpr", 
-      "gpr_test_util", 
       "grpc", 
       "grpc_test_util"
     ], 
@@ -588,7 +579,6 @@
   {
     "deps": [
       "gpr", 
-      "gpr_test_util", 
       "grpc", 
       "grpc_test_util"
     ], 
@@ -605,7 +595,6 @@
   {
     "deps": [
       "gpr", 
-      "gpr_test_util", 
       "grpc", 
       "grpc_test_util"
     ], 
@@ -622,7 +611,8 @@
   {
     "deps": [
       "gpr", 
-      "gpr_test_util"
+      "grpc_test_util_unsecure", 
+      "grpc_unsecure"
     ], 
     "headers": [], 
     "is_filegroup": false, 
@@ -637,7 +627,6 @@
   {
     "deps": [
       "gpr", 
-      "gpr_test_util", 
       "grpc", 
       "grpc_test_util"
     ], 
@@ -654,7 +643,8 @@
   {
     "deps": [
       "gpr", 
-      "gpr_test_util"
+      "grpc_test_util_unsecure", 
+      "grpc_unsecure"
     ], 
     "headers": [], 
     "is_filegroup": false, 
@@ -669,7 +659,8 @@
   {
     "deps": [
       "gpr", 
-      "gpr_test_util"
+      "grpc_test_util_unsecure", 
+      "grpc_unsecure"
     ], 
     "headers": [], 
     "is_filegroup": false, 
@@ -684,7 +675,8 @@
   {
     "deps": [
       "gpr", 
-      "gpr_test_util"
+      "grpc_test_util_unsecure", 
+      "grpc_unsecure"
     ], 
     "headers": [], 
     "is_filegroup": false, 
@@ -699,7 +691,8 @@
   {
     "deps": [
       "gpr", 
-      "gpr_test_util"
+      "grpc_test_util_unsecure", 
+      "grpc_unsecure"
     ], 
     "headers": [], 
     "is_filegroup": false, 
@@ -714,7 +707,8 @@
   {
     "deps": [
       "gpr", 
-      "gpr_test_util"
+      "grpc_test_util_unsecure", 
+      "grpc_unsecure"
     ], 
     "headers": [], 
     "is_filegroup": false, 
@@ -729,7 +723,8 @@
   {
     "deps": [
       "gpr", 
-      "gpr_test_util"
+      "grpc_test_util_unsecure", 
+      "grpc_unsecure"
     ], 
     "headers": [], 
     "is_filegroup": false, 
@@ -744,7 +739,8 @@
   {
     "deps": [
       "gpr", 
-      "gpr_test_util"
+      "grpc_test_util_unsecure", 
+      "grpc_unsecure"
     ], 
     "headers": [], 
     "is_filegroup": false, 
@@ -759,7 +755,8 @@
   {
     "deps": [
       "gpr", 
-      "gpr_test_util"
+      "grpc_test_util_unsecure", 
+      "grpc_unsecure"
     ], 
     "headers": [], 
     "is_filegroup": false, 
@@ -774,7 +771,8 @@
   {
     "deps": [
       "gpr", 
-      "gpr_test_util"
+      "grpc_test_util_unsecure", 
+      "grpc_unsecure"
     ], 
     "headers": [], 
     "is_filegroup": false, 
@@ -789,7 +787,8 @@
   {
     "deps": [
       "gpr", 
-      "gpr_test_util"
+      "grpc_test_util_unsecure", 
+      "grpc_unsecure"
     ], 
     "headers": [], 
     "is_filegroup": false, 
@@ -804,7 +803,8 @@
   {
     "deps": [
       "gpr", 
-      "gpr_test_util"
+      "grpc_test_util_unsecure", 
+      "grpc_unsecure"
     ], 
     "headers": [], 
     "is_filegroup": false, 
@@ -819,7 +819,8 @@
   {
     "deps": [
       "gpr", 
-      "gpr_test_util"
+      "grpc_test_util_unsecure", 
+      "grpc_unsecure"
     ], 
     "headers": [], 
     "is_filegroup": false, 
@@ -834,7 +835,8 @@
   {
     "deps": [
       "gpr", 
-      "gpr_test_util"
+      "grpc_test_util_unsecure", 
+      "grpc_unsecure"
     ], 
     "headers": [], 
     "is_filegroup": false, 
@@ -849,7 +851,6 @@
   {
     "deps": [
       "gpr", 
-      "gpr_test_util", 
       "grpc", 
       "grpc_test_util"
     ], 
@@ -866,7 +867,6 @@
   {
     "deps": [
       "gpr", 
-      "gpr_test_util", 
       "grpc", 
       "grpc_test_util"
     ], 
@@ -883,7 +883,6 @@
   {
     "deps": [
       "gpr", 
-      "gpr_test_util", 
       "grpc", 
       "grpc_test_util"
     ], 
@@ -900,7 +899,6 @@
   {
     "deps": [
       "gpr", 
-      "gpr_test_util", 
       "grpc", 
       "grpc_test_util"
     ], 
@@ -917,7 +915,6 @@
   {
     "deps": [
       "gpr", 
-      "gpr_test_util", 
       "grpc", 
       "grpc_test_util"
     ], 
@@ -934,7 +931,6 @@
   {
     "deps": [
       "gpr", 
-      "gpr_test_util", 
       "grpc", 
       "grpc_test_util"
     ], 
@@ -951,7 +947,6 @@
   {
     "deps": [
       "gpr", 
-      "gpr_test_util", 
       "grpc", 
       "grpc_test_util"
     ], 
@@ -968,7 +963,6 @@
   {
     "deps": [
       "gpr", 
-      "gpr_test_util", 
       "grpc", 
       "grpc_test_util"
     ], 
@@ -1001,7 +995,6 @@
   {
     "deps": [
       "gpr", 
-      "gpr_test_util", 
       "grpc", 
       "grpc_test_util"
     ], 
@@ -1018,7 +1011,6 @@
   {
     "deps": [
       "gpr", 
-      "gpr_test_util", 
       "grpc", 
       "grpc_test_util"
     ], 
@@ -1035,7 +1027,6 @@
   {
     "deps": [
       "gpr", 
-      "gpr_test_util", 
       "grpc", 
       "grpc_test_util"
     ], 
@@ -1052,7 +1043,6 @@
   {
     "deps": [
       "gpr", 
-      "gpr_test_util", 
       "grpc", 
       "grpc_test_util"
     ], 
@@ -1069,7 +1059,6 @@
   {
     "deps": [
       "gpr", 
-      "gpr_test_util", 
       "grpc", 
       "grpc_test_util"
     ], 
@@ -1102,7 +1091,6 @@
   {
     "deps": [
       "gpr", 
-      "gpr_test_util", 
       "grpc", 
       "grpc_test_util"
     ], 
@@ -1119,7 +1107,6 @@
   {
     "deps": [
       "gpr", 
-      "gpr_test_util", 
       "grpc", 
       "grpc_test_util"
     ], 
@@ -1152,7 +1139,6 @@
   {
     "deps": [
       "gpr", 
-      "gpr_test_util", 
       "grpc", 
       "grpc_test_util"
     ], 
@@ -1169,7 +1155,6 @@
   {
     "deps": [
       "gpr", 
-      "gpr_test_util", 
       "grpc", 
       "grpc_test_util"
     ], 
@@ -1190,7 +1175,6 @@
   {
     "deps": [
       "gpr", 
-      "gpr_test_util", 
       "grpc", 
       "grpc_test_util"
     ], 
@@ -1211,7 +1195,6 @@
   {
     "deps": [
       "gpr", 
-      "gpr_test_util", 
       "grpc", 
       "grpc_test_util"
     ], 
@@ -1243,7 +1226,6 @@
   {
     "deps": [
       "gpr", 
-      "gpr_test_util", 
       "grpc", 
       "grpc_test_util"
     ], 
@@ -1260,7 +1242,6 @@
   {
     "deps": [
       "gpr", 
-      "gpr_test_util", 
       "grpc", 
       "grpc_test_util"
     ], 
@@ -1277,7 +1258,6 @@
   {
     "deps": [
       "gpr", 
-      "gpr_test_util", 
       "grpc", 
       "grpc_test_util"
     ], 
@@ -1294,7 +1274,6 @@
   {
     "deps": [
       "gpr", 
-      "gpr_test_util", 
       "grpc", 
       "grpc_test_util"
     ], 
@@ -1311,7 +1290,6 @@
   {
     "deps": [
       "gpr", 
-      "gpr_test_util", 
       "grpc", 
       "grpc_test_util"
     ], 
@@ -1328,7 +1306,6 @@
   {
     "deps": [
       "gpr", 
-      "gpr_test_util", 
       "grpc", 
       "grpc_test_util"
     ], 
@@ -1345,7 +1322,6 @@
   {
     "deps": [
       "gpr", 
-      "gpr_test_util", 
       "grpc", 
       "grpc_test_util"
     ], 
@@ -1362,7 +1338,6 @@
   {
     "deps": [
       "gpr", 
-      "gpr_test_util", 
       "grpc", 
       "grpc_test_util"
     ], 
@@ -1379,7 +1354,6 @@
   {
     "deps": [
       "gpr", 
-      "gpr_test_util", 
       "grpc", 
       "grpc_test_util"
     ], 
@@ -1396,7 +1370,6 @@
   {
     "deps": [
       "gpr", 
-      "gpr_test_util", 
       "grpc", 
       "grpc_test_util"
     ], 
@@ -1413,7 +1386,6 @@
   {
     "deps": [
       "gpr", 
-      "gpr_test_util", 
       "grpc", 
       "grpc_test_util"
     ], 
@@ -1433,7 +1405,6 @@
   {
     "deps": [
       "gpr", 
-      "gpr_test_util", 
       "grpc", 
       "grpc_test_util"
     ], 
@@ -1450,7 +1421,6 @@
   {
     "deps": [
       "gpr", 
-      "gpr_test_util", 
       "grpc", 
       "grpc_test_util"
     ], 
@@ -1467,7 +1437,6 @@
   {
     "deps": [
       "gpr", 
-      "gpr_test_util", 
       "grpc", 
       "grpc_test_util"
     ], 
@@ -1484,7 +1453,6 @@
   {
     "deps": [
       "gpr", 
-      "gpr_test_util", 
       "grpc", 
       "grpc_test_util"
     ], 
@@ -1501,7 +1469,6 @@
   {
     "deps": [
       "gpr", 
-      "gpr_test_util", 
       "grpc", 
       "grpc_test_util"
     ], 
@@ -1518,7 +1485,6 @@
   {
     "deps": [
       "gpr", 
-      "gpr_test_util", 
       "grpc", 
       "grpc_test_util"
     ], 
@@ -1535,7 +1501,6 @@
   {
     "deps": [
       "gpr", 
-      "gpr_test_util", 
       "grpc", 
       "grpc_test_util"
     ], 
@@ -1552,7 +1517,6 @@
   {
     "deps": [
       "gpr", 
-      "gpr_test_util", 
       "grpc", 
       "grpc_test_util"
     ], 
@@ -1569,7 +1533,6 @@
   {
     "deps": [
       "gpr", 
-      "gpr_test_util", 
       "grpc", 
       "grpc_test_util"
     ], 
@@ -1586,7 +1549,6 @@
   {
     "deps": [
       "gpr", 
-      "gpr_test_util", 
       "grpc", 
       "grpc_test_util"
     ], 
@@ -1603,7 +1565,6 @@
   {
     "deps": [
       "gpr", 
-      "gpr_test_util", 
       "grpc", 
       "grpc_test_util"
     ], 
@@ -1620,7 +1581,6 @@
   {
     "deps": [
       "gpr", 
-      "gpr_test_util", 
       "grpc", 
       "grpc_test_util"
     ], 
@@ -1637,7 +1597,6 @@
   {
     "deps": [
       "gpr", 
-      "gpr_test_util", 
       "grpc", 
       "grpc_test_util"
     ], 
@@ -1654,7 +1613,6 @@
   {
     "deps": [
       "gpr", 
-      "gpr_test_util", 
       "grpc", 
       "grpc_test_util"
     ], 
@@ -1671,7 +1629,6 @@
   {
     "deps": [
       "gpr", 
-      "gpr_test_util", 
       "grpc", 
       "grpc_test_util"
     ], 
@@ -1688,7 +1645,8 @@
   {
     "deps": [
       "gpr", 
-      "gpr_test_util"
+      "grpc_test_util_unsecure", 
+      "grpc_unsecure"
     ], 
     "headers": [], 
     "is_filegroup": false, 
@@ -1703,7 +1661,6 @@
   {
     "deps": [
       "gpr", 
-      "gpr_test_util", 
       "grpc", 
       "grpc_test_util"
     ], 
@@ -1720,7 +1677,6 @@
   {
     "deps": [
       "gpr", 
-      "gpr_test_util", 
       "grpc", 
       "grpc_test_util"
     ], 
@@ -1737,7 +1693,6 @@
   {
     "deps": [
       "gpr", 
-      "gpr_test_util", 
       "grpc", 
       "grpc_test_util"
     ], 
@@ -1754,7 +1709,6 @@
   {
     "deps": [
       "gpr", 
-      "gpr_test_util", 
       "grpc", 
       "grpc_test_util"
     ], 
@@ -1771,7 +1725,6 @@
   {
     "deps": [
       "gpr", 
-      "gpr_test_util", 
       "grpc", 
       "grpc_test_util"
     ], 
@@ -1788,7 +1741,22 @@
   {
     "deps": [
       "gpr", 
-      "gpr_test_util", 
+      "grpc", 
+      "grpc_test_util"
+    ], 
+    "headers": [], 
+    "is_filegroup": false, 
+    "language": "c", 
+    "name": "parse_address_with_named_scope_id_test", 
+    "src": [
+      "test/core/client_channel/parse_address_with_named_scope_id_test.cc"
+    ], 
+    "third_party": false, 
+    "type": "target"
+  }, 
+  {
+    "deps": [
+      "gpr", 
       "grpc", 
       "grpc_test_util"
     ], 
@@ -1805,7 +1773,6 @@
   {
     "deps": [
       "gpr", 
-      "gpr_test_util", 
       "grpc", 
       "grpc_test_util"
     ], 
@@ -1822,7 +1789,6 @@
   {
     "deps": [
       "gpr", 
-      "gpr_test_util", 
       "grpc", 
       "grpc_test_util"
     ], 
@@ -1839,14 +1805,13 @@
   {
     "deps": [
       "gpr", 
-      "gpr_test_util", 
       "grpc", 
       "grpc_test_util"
     ], 
     "headers": [], 
     "is_filegroup": false, 
     "language": "c", 
-    "name": "resolve_address_posix_test", 
+    "name": "resolve_address_using_ares_resolver_posix_test", 
     "src": [
       "test/core/iomgr/resolve_address_posix_test.cc"
     ], 
@@ -1856,7 +1821,6 @@
   {
     "deps": [
       "gpr", 
-      "gpr_test_util", 
       "grpc", 
       "grpc_test_util"
     ], 
@@ -1873,7 +1837,22 @@
   {
     "deps": [
       "gpr", 
-      "gpr_test_util", 
+      "grpc", 
+      "grpc_test_util"
+    ], 
+    "headers": [], 
+    "is_filegroup": false, 
+    "language": "c", 
+    "name": "resolve_address_using_native_resolver_posix_test", 
+    "src": [
+      "test/core/iomgr/resolve_address_posix_test.cc"
+    ], 
+    "third_party": false, 
+    "type": "target"
+  }, 
+  {
+    "deps": [
+      "gpr", 
       "grpc", 
       "grpc_test_util"
     ], 
@@ -1890,7 +1869,6 @@
   {
     "deps": [
       "gpr", 
-      "gpr_test_util", 
       "grpc", 
       "grpc_test_util"
     ], 
@@ -1907,7 +1885,6 @@
   {
     "deps": [
       "gpr", 
-      "gpr_test_util", 
       "grpc", 
       "grpc_test_util"
     ], 
@@ -1924,7 +1901,6 @@
   {
     "deps": [
       "gpr", 
-      "gpr_test_util", 
       "grpc", 
       "grpc_test_util"
     ], 
@@ -1941,7 +1917,6 @@
   {
     "deps": [
       "gpr", 
-      "gpr_test_util", 
       "grpc", 
       "grpc_test_util"
     ], 
@@ -1958,7 +1933,6 @@
   {
     "deps": [
       "gpr", 
-      "gpr_test_util", 
       "grpc", 
       "grpc_test_util"
     ], 
@@ -1975,7 +1949,6 @@
   {
     "deps": [
       "gpr", 
-      "gpr_test_util", 
       "grpc", 
       "grpc_test_util"
     ], 
@@ -1992,7 +1965,6 @@
   {
     "deps": [
       "gpr", 
-      "gpr_test_util", 
       "grpc", 
       "grpc_test_util"
     ], 
@@ -2009,7 +1981,6 @@
   {
     "deps": [
       "gpr", 
-      "gpr_test_util", 
       "grpc", 
       "grpc_test_util"
     ], 
@@ -2026,7 +1997,6 @@
   {
     "deps": [
       "gpr", 
-      "gpr_test_util", 
       "grpc", 
       "grpc_test_util"
     ], 
@@ -2043,7 +2013,6 @@
   {
     "deps": [
       "gpr", 
-      "gpr_test_util", 
       "grpc", 
       "grpc_test_util"
     ], 
@@ -2060,7 +2029,6 @@
   {
     "deps": [
       "gpr", 
-      "gpr_test_util", 
       "grpc", 
       "grpc_test_util"
     ], 
@@ -2077,7 +2045,6 @@
   {
     "deps": [
       "gpr", 
-      "gpr_test_util", 
       "grpc", 
       "grpc_test_util"
     ], 
@@ -2094,7 +2061,6 @@
   {
     "deps": [
       "gpr", 
-      "gpr_test_util", 
       "grpc", 
       "grpc_test_util"
     ], 
@@ -2111,7 +2077,6 @@
   {
     "deps": [
       "gpr", 
-      "gpr_test_util", 
       "grpc", 
       "grpc_test_util"
     ], 
@@ -2128,8 +2093,8 @@
   {
     "deps": [
       "gpr", 
-      "gpr_test_util", 
       "grpc", 
+      "grpc_test_util", 
       "transport_security_test_lib"
     ], 
     "headers": [], 
@@ -2145,7 +2110,6 @@
   {
     "deps": [
       "gpr", 
-      "gpr_test_util", 
       "grpc", 
       "grpc_test_util"
     ], 
@@ -2162,7 +2126,6 @@
   {
     "deps": [
       "gpr", 
-      "gpr_test_util", 
       "grpc", 
       "grpc_test_util"
     ], 
@@ -2179,7 +2142,6 @@
   {
     "deps": [
       "gpr", 
-      "gpr_test_util", 
       "grpc", 
       "grpc_test_util"
     ], 
@@ -2196,7 +2158,6 @@
   {
     "deps": [
       "gpr", 
-      "gpr_test_util", 
       "grpc", 
       "grpc_test_util"
     ], 
@@ -2213,7 +2174,6 @@
   {
     "deps": [
       "gpr", 
-      "gpr_test_util", 
       "grpc", 
       "grpc_test_util"
     ], 
@@ -2230,7 +2190,6 @@
   {
     "deps": [
       "gpr", 
-      "gpr_test_util", 
       "grpc", 
       "grpc_test_util"
     ], 
@@ -2247,7 +2206,6 @@
   {
     "deps": [
       "gpr", 
-      "gpr_test_util", 
       "grpc", 
       "grpc_test_util"
     ], 
@@ -2264,7 +2222,6 @@
   {
     "deps": [
       "gpr", 
-      "gpr_test_util", 
       "grpc", 
       "grpc_test_util"
     ], 
@@ -2281,7 +2238,6 @@
   {
     "deps": [
       "gpr", 
-      "gpr_test_util", 
       "grpc", 
       "grpc_test_util"
     ], 
@@ -2298,7 +2254,6 @@
   {
     "deps": [
       "gpr", 
-      "gpr_test_util", 
       "grpc", 
       "grpc_test_util"
     ], 
@@ -2315,7 +2270,6 @@
   {
     "deps": [
       "gpr", 
-      "gpr_test_util", 
       "grpc", 
       "grpc_test_util"
     ], 
@@ -2332,7 +2286,6 @@
   {
     "deps": [
       "gpr", 
-      "gpr_test_util", 
       "grpc", 
       "grpc_test_util"
     ], 
@@ -2349,7 +2302,6 @@
   {
     "deps": [
       "gpr", 
-      "gpr_test_util", 
       "grpc", 
       "grpc_test_util"
     ], 
@@ -2366,7 +2318,6 @@
   {
     "deps": [
       "gpr", 
-      "gpr_test_util", 
       "grpc", 
       "grpc_test_util"
     ], 
@@ -2383,7 +2334,6 @@
   {
     "deps": [
       "gpr", 
-      "gpr_test_util", 
       "grpc", 
       "grpc_test_util"
     ], 
@@ -2400,7 +2350,6 @@
   {
     "deps": [
       "gpr", 
-      "gpr_test_util", 
       "grpc", 
       "grpc_test_util"
     ], 
@@ -2417,7 +2366,6 @@
   {
     "deps": [
       "gpr", 
-      "gpr_test_util", 
       "grpc", 
       "grpc_test_util"
     ], 
@@ -2434,7 +2382,6 @@
   {
     "deps": [
       "gpr", 
-      "gpr_test_util", 
       "grpc", 
       "grpc_test_util"
     ], 
@@ -2451,7 +2398,6 @@
   {
     "deps": [
       "gpr", 
-      "gpr_test_util", 
       "grpc", 
       "grpc_test_util"
     ], 
@@ -2468,7 +2414,6 @@
   {
     "deps": [
       "gpr", 
-      "gpr_test_util", 
       "grpc++_test_util_unsecure", 
       "grpc++_unsecure", 
       "grpc_test_util_unsecure", 
@@ -2504,8 +2449,8 @@
     "deps": [
       "alts_test_util", 
       "gpr", 
-      "gpr_test_util", 
-      "grpc"
+      "grpc", 
+      "grpc_test_util"
     ], 
     "headers": [], 
     "is_filegroup": false, 
@@ -2696,7 +2641,6 @@
   {
     "deps": [
       "gpr", 
-      "gpr_test_util", 
       "grpc", 
       "grpc++", 
       "grpc++_test_util", 
@@ -2715,7 +2659,6 @@
   {
     "deps": [
       "gpr", 
-      "gpr_test_util", 
       "grpc", 
       "grpc++", 
       "grpc++_test_util", 
@@ -2734,7 +2677,6 @@
   {
     "deps": [
       "gpr", 
-      "gpr_test_util", 
       "grpc", 
       "grpc_test_util"
     ], 
@@ -2751,7 +2693,6 @@
   {
     "deps": [
       "gpr", 
-      "gpr_test_util", 
       "grpc", 
       "grpc++", 
       "grpc++_test_util", 
@@ -2771,7 +2712,27 @@
     "deps": [
       "benchmark", 
       "gpr", 
-      "gpr_test_util", 
+      "grpc++_test_config", 
+      "grpc++_test_util_unsecure", 
+      "grpc++_unsecure", 
+      "grpc_benchmark", 
+      "grpc_test_util_unsecure", 
+      "grpc_unsecure"
+    ], 
+    "headers": [], 
+    "is_filegroup": false, 
+    "language": "c++", 
+    "name": "bm_alarm", 
+    "src": [
+      "test/cpp/microbenchmarks/bm_alarm.cc"
+    ], 
+    "third_party": false, 
+    "type": "target"
+  }, 
+  {
+    "deps": [
+      "benchmark", 
+      "gpr", 
       "grpc++_test_config", 
       "grpc++_test_util_unsecure", 
       "grpc++_unsecure", 
@@ -2793,7 +2754,27 @@
     "deps": [
       "benchmark", 
       "gpr", 
-      "gpr_test_util", 
+      "grpc++_test_config", 
+      "grpc++_test_util_unsecure", 
+      "grpc++_unsecure", 
+      "grpc_benchmark", 
+      "grpc_test_util_unsecure", 
+      "grpc_unsecure"
+    ], 
+    "headers": [], 
+    "is_filegroup": false, 
+    "language": "c++", 
+    "name": "bm_byte_buffer", 
+    "src": [
+      "test/cpp/microbenchmarks/bm_byte_buffer.cc"
+    ], 
+    "third_party": false, 
+    "type": "target"
+  }, 
+  {
+    "deps": [
+      "benchmark", 
+      "gpr", 
       "grpc++_test_config", 
       "grpc++_test_util_unsecure", 
       "grpc++_unsecure", 
@@ -2815,7 +2796,6 @@
     "deps": [
       "benchmark", 
       "gpr", 
-      "gpr_test_util", 
       "grpc++_test_config", 
       "grpc++_test_util_unsecure", 
       "grpc++_unsecure", 
@@ -2837,7 +2817,6 @@
     "deps": [
       "benchmark", 
       "gpr", 
-      "gpr_test_util", 
       "grpc++_test_config", 
       "grpc++_test_util_unsecure", 
       "grpc++_unsecure", 
@@ -2859,7 +2838,6 @@
     "deps": [
       "benchmark", 
       "gpr", 
-      "gpr_test_util", 
       "grpc++_test_config", 
       "grpc++_test_util_unsecure", 
       "grpc++_unsecure", 
@@ -2881,7 +2859,6 @@
     "deps": [
       "benchmark", 
       "gpr", 
-      "gpr_test_util", 
       "grpc++_test_config", 
       "grpc++_test_util_unsecure", 
       "grpc++_unsecure", 
@@ -2903,7 +2880,6 @@
     "deps": [
       "benchmark", 
       "gpr", 
-      "gpr_test_util", 
       "grpc++_test_config", 
       "grpc++_test_util_unsecure", 
       "grpc++_unsecure", 
@@ -2925,7 +2901,6 @@
     "deps": [
       "benchmark", 
       "gpr", 
-      "gpr_test_util", 
       "grpc++_test_config", 
       "grpc++_test_util_unsecure", 
       "grpc++_unsecure", 
@@ -2947,7 +2922,6 @@
     "deps": [
       "benchmark", 
       "gpr", 
-      "gpr_test_util", 
       "grpc++_test_config", 
       "grpc++_test_util_unsecure", 
       "grpc++_unsecure", 
@@ -2969,7 +2943,6 @@
     "deps": [
       "benchmark", 
       "gpr", 
-      "gpr_test_util", 
       "grpc++_test_config", 
       "grpc++_test_util_unsecure", 
       "grpc++_unsecure", 
@@ -2994,7 +2967,6 @@
     "deps": [
       "benchmark", 
       "gpr", 
-      "gpr_test_util", 
       "grpc++_test_config", 
       "grpc++_test_util_unsecure", 
       "grpc++_unsecure", 
@@ -3019,7 +2991,6 @@
     "deps": [
       "benchmark", 
       "gpr", 
-      "gpr_test_util", 
       "grpc++_test_config", 
       "grpc++_test_util_unsecure", 
       "grpc++_unsecure", 
@@ -3041,7 +3012,6 @@
     "deps": [
       "benchmark", 
       "gpr", 
-      "gpr_test_util", 
       "grpc++_test_config", 
       "grpc++_test_util_unsecure", 
       "grpc++_unsecure", 
@@ -3066,7 +3036,6 @@
     "deps": [
       "benchmark", 
       "gpr", 
-      "gpr_test_util", 
       "grpc++_test_config", 
       "grpc++_test_util_unsecure", 
       "grpc++_unsecure", 
@@ -3088,7 +3057,6 @@
     "deps": [
       "benchmark", 
       "gpr", 
-      "gpr_test_util", 
       "grpc++_test_config", 
       "grpc++_test_util_unsecure", 
       "grpc++_unsecure", 
@@ -3108,8 +3076,28 @@
   }, 
   {
     "deps": [
+      "benchmark", 
       "gpr", 
-      "gpr_test_util", 
+      "grpc++_test_config", 
+      "grpc++_test_util_unsecure", 
+      "grpc++_unsecure", 
+      "grpc_benchmark", 
+      "grpc_test_util_unsecure", 
+      "grpc_unsecure"
+    ], 
+    "headers": [], 
+    "is_filegroup": false, 
+    "language": "c++", 
+    "name": "bm_timer", 
+    "src": [
+      "test/cpp/microbenchmarks/bm_timer.cc"
+    ], 
+    "third_party": false, 
+    "type": "target"
+  }, 
+  {
+    "deps": [
+      "gpr", 
       "grpc", 
       "grpc_test_util"
     ], 
@@ -3158,7 +3146,6 @@
   {
     "deps": [
       "gpr", 
-      "gpr_test_util", 
       "grpc", 
       "grpc++", 
       "grpc++_test", 
@@ -3179,7 +3166,6 @@
   {
     "deps": [
       "gpr", 
-      "gpr_test_util", 
       "grpc", 
       "grpc++", 
       "grpc++_test", 
@@ -3199,7 +3185,6 @@
   {
     "deps": [
       "gpr", 
-      "gpr_test_util", 
       "grpc", 
       "grpc++", 
       "grpc++_test_util", 
@@ -3220,7 +3205,6 @@
   {
     "deps": [
       "gpr", 
-      "gpr_test_util", 
       "grpc", 
       "grpc++", 
       "grpc++_test", 
@@ -3271,7 +3255,6 @@
   {
     "deps": [
       "gpr", 
-      "gpr_test_util", 
       "grpc", 
       "grpc_test_util"
     ], 
@@ -3288,7 +3271,6 @@
   {
     "deps": [
       "gpr", 
-      "gpr_test_util", 
       "grpc", 
       "grpc++", 
       "grpc++_test_util", 
@@ -3308,7 +3290,6 @@
   {
     "deps": [
       "gpr", 
-      "gpr_test_util", 
       "grpc", 
       "grpc++", 
       "grpc++_test_util", 
@@ -3327,7 +3308,6 @@
   {
     "deps": [
       "gpr", 
-      "gpr_test_util", 
       "grpc", 
       "grpc++", 
       "grpc++_test_util", 
@@ -3350,7 +3330,6 @@
   {
     "deps": [
       "gpr", 
-      "gpr_test_util", 
       "grpc", 
       "grpc++", 
       "grpc++_test_util", 
@@ -3369,7 +3348,6 @@
   {
     "deps": [
       "gpr", 
-      "gpr_test_util", 
       "grpc", 
       "grpc++", 
       "grpc++_test_util", 
@@ -3388,7 +3366,6 @@
   {
     "deps": [
       "gpr", 
-      "gpr_test_util", 
       "grpc", 
       "grpc++", 
       "grpc++_test_util", 
@@ -3411,7 +3388,6 @@
   {
     "deps": [
       "gpr", 
-      "gpr_test_util", 
       "grpc", 
       "grpc++", 
       "grpc++_test_util", 
@@ -3511,6 +3487,22 @@
     "deps": [
       "gpr", 
       "grpc", 
+      "grpc_test_util"
+    ], 
+    "headers": [], 
+    "is_filegroup": false, 
+    "language": "c++", 
+    "name": "context_list_test", 
+    "src": [
+      "test/core/transport/chttp2/context_list_test.cc"
+    ], 
+    "third_party": false, 
+    "type": "target"
+  }, 
+  {
+    "deps": [
+      "gpr", 
+      "grpc", 
       "grpc++"
     ], 
     "headers": [], 
@@ -3526,7 +3518,6 @@
   {
     "deps": [
       "gpr", 
-      "gpr_test_util", 
       "grpc", 
       "grpc++", 
       "grpc_test_util"
@@ -3544,7 +3535,6 @@
   {
     "deps": [
       "gpr", 
-      "gpr_test_util", 
       "grpc", 
       "grpc++", 
       "grpc_test_util"
@@ -3577,7 +3567,6 @@
   {
     "deps": [
       "gpr", 
-      "gpr_test_util", 
       "grpc", 
       "grpc++", 
       "grpc_test_util"
@@ -3595,7 +3584,6 @@
   {
     "deps": [
       "gpr", 
-      "gpr_test_util", 
       "grpc", 
       "grpc++", 
       "grpc++_test_util", 
@@ -3637,7 +3625,6 @@
   {
     "deps": [
       "gpr", 
-      "gpr_test_util", 
       "grpc", 
       "grpc++", 
       "grpc++_test_util", 
@@ -3656,7 +3643,6 @@
   {
     "deps": [
       "gpr", 
-      "gpr_test_util", 
       "grpc", 
       "grpc++", 
       "grpc++_test_util", 
@@ -3675,7 +3661,6 @@
   {
     "deps": [
       "gpr", 
-      "gpr_test_util", 
       "grpc", 
       "grpc++", 
       "grpc++_test_util", 
@@ -3776,7 +3761,6 @@
   {
     "deps": [
       "gpr", 
-      "gpr_test_util", 
       "grpc", 
       "grpc_test_util"
     ], 
@@ -3863,7 +3847,6 @@
   {
     "deps": [
       "gpr", 
-      "gpr_test_util", 
       "grpc", 
       "grpc++", 
       "grpc++_codegen_proto", 
@@ -3914,7 +3897,6 @@
   {
     "deps": [
       "gpr", 
-      "gpr_test_util", 
       "grpc", 
       "grpc++", 
       "grpc++_test_util", 
@@ -3937,7 +3919,6 @@
   {
     "deps": [
       "gpr", 
-      "gpr_test_util", 
       "grpc", 
       "grpc++", 
       "grpc++_test", 
@@ -3959,7 +3940,6 @@
   {
     "deps": [
       "gpr", 
-      "gpr_test_util", 
       "grpc", 
       "grpc++", 
       "grpc++_test", 
@@ -3981,7 +3961,6 @@
   {
     "deps": [
       "gpr", 
-      "gpr_test_util", 
       "grpc", 
       "grpc++", 
       "grpc++_test_util", 
@@ -4017,7 +3996,6 @@
   {
     "deps": [
       "gpr", 
-      "gpr_test_util", 
       "grpc", 
       "grpc++", 
       "grpc++_test_util", 
@@ -4036,7 +4014,6 @@
   {
     "deps": [
       "gpr", 
-      "gpr_test_util", 
       "grpc", 
       "grpc++", 
       "grpc++_test", 
@@ -4055,7 +4032,6 @@
   {
     "deps": [
       "gpr", 
-      "gpr_test_util", 
       "grpc", 
       "grpc++", 
       "grpc++_core_stats", 
@@ -4077,7 +4053,6 @@
   {
     "deps": [
       "gpr", 
-      "gpr_test_util", 
       "grpc", 
       "grpc++", 
       "grpc++_test_config", 
@@ -4097,7 +4072,6 @@
   {
     "deps": [
       "gpr", 
-      "gpr_test_util", 
       "grpc", 
       "grpc++", 
       "grpc++_test_config", 
@@ -4118,7 +4092,6 @@
   {
     "deps": [
       "gpr", 
-      "gpr_test_util", 
       "grpc", 
       "grpc++_test_config", 
       "grpc_test_util"
@@ -4136,7 +4109,6 @@
   {
     "deps": [
       "gpr", 
-      "gpr_test_util", 
       "grpc", 
       "grpc++", 
       "grpc++_test_config", 
@@ -4156,7 +4128,6 @@
   {
     "deps": [
       "gpr", 
-      "gpr_test_util", 
       "grpc", 
       "grpc++", 
       "grpc++_test", 
@@ -4198,7 +4169,6 @@
   {
     "deps": [
       "gpr", 
-      "gpr_test_util", 
       "grpc", 
       "grpc++", 
       "grpc++_test_util", 
@@ -4222,7 +4192,6 @@
   {
     "deps": [
       "gpr", 
-      "gpr_test_util", 
       "grpc", 
       "grpc++", 
       "grpc++_test_util", 
@@ -4255,7 +4224,24 @@
   {
     "deps": [
       "gpr", 
-      "gpr_test_util", 
+      "grpc", 
+      "grpc++", 
+      "grpc++_test", 
+      "grpc_test_util"
+    ], 
+    "headers": [], 
+    "is_filegroup": false, 
+    "language": "c++", 
+    "name": "optional_test", 
+    "src": [
+      "test/core/gprpp/optional_test.cc"
+    ], 
+    "third_party": false, 
+    "type": "target"
+  }, 
+  {
+    "deps": [
+      "gpr", 
       "grpc", 
       "grpc++", 
       "grpc++_test", 
@@ -4274,7 +4260,6 @@
   {
     "deps": [
       "gpr", 
-      "gpr_test_util", 
       "grpc", 
       "grpc++", 
       "grpc++_proto_reflection_desc_db", 
@@ -4312,7 +4297,6 @@
   {
     "deps": [
       "gpr", 
-      "gpr_test_util", 
       "grpc", 
       "grpc++", 
       "grpc++_test_config", 
@@ -4333,7 +4317,6 @@
   {
     "deps": [
       "gpr", 
-      "gpr_test_util", 
       "grpc", 
       "grpc++", 
       "grpc++_core_stats", 
@@ -4355,7 +4338,6 @@
   {
     "deps": [
       "gpr", 
-      "gpr_test_util", 
       "grpc", 
       "grpc++", 
       "grpc++_core_stats", 
@@ -4377,7 +4359,6 @@
   {
     "deps": [
       "gpr", 
-      "gpr_test_util", 
       "grpc", 
       "grpc++", 
       "grpc++_core_stats", 
@@ -4404,7 +4385,6 @@
   {
     "deps": [
       "gpr", 
-      "gpr_test_util", 
       "grpc", 
       "grpc++", 
       "grpc++_test_util", 
@@ -4423,7 +4403,6 @@
   {
     "deps": [
       "gpr", 
-      "gpr_test_util", 
       "grpc", 
       "grpc++", 
       "grpc++_test_config", 
@@ -4453,7 +4432,6 @@
   {
     "deps": [
       "gpr", 
-      "gpr_test_util", 
       "grpc", 
       "grpc++", 
       "grpc++_test_config", 
@@ -4485,7 +4463,6 @@
   {
     "deps": [
       "gpr", 
-      "gpr_test_util", 
       "grpc", 
       "grpc++", 
       "grpc++_test", 
@@ -4504,7 +4481,6 @@
   {
     "deps": [
       "gpr", 
-      "gpr_test_util", 
       "grpc", 
       "grpc++", 
       "grpc++_test", 
@@ -4523,7 +4499,6 @@
   {
     "deps": [
       "gpr", 
-      "gpr_test_util", 
       "grpc", 
       "grpc_test_util"
     ], 
@@ -4540,7 +4515,6 @@
   {
     "deps": [
       "gpr", 
-      "gpr_test_util", 
       "grpc", 
       "grpc++", 
       "grpc++_test_util", 
@@ -4559,7 +4533,6 @@
   {
     "deps": [
       "gpr", 
-      "gpr_test_util", 
       "grpc", 
       "grpc++", 
       "grpc++_core_stats", 
@@ -4581,7 +4554,6 @@
   {
     "deps": [
       "gpr", 
-      "gpr_test_util", 
       "grpc", 
       "grpc++", 
       "grpc++_test_util", 
@@ -4600,7 +4572,6 @@
   {
     "deps": [
       "gpr", 
-      "gpr_test_util", 
       "grpc++_test_util_unsecure", 
       "grpc++_unsecure", 
       "grpc_test_util_unsecure", 
@@ -4626,7 +4597,6 @@
   {
     "deps": [
       "gpr", 
-      "gpr_test_util", 
       "grpc++_test_util_unsecure", 
       "grpc++_unsecure", 
       "grpc_test_util_unsecure", 
@@ -4652,7 +4622,6 @@
   {
     "deps": [
       "gpr", 
-      "gpr_test_util", 
       "grpc", 
       "grpc++", 
       "grpc++_test", 
@@ -4671,7 +4640,6 @@
   {
     "deps": [
       "gpr", 
-      "gpr_test_util", 
       "grpc", 
       "grpc++", 
       "grpc++_test_util", 
@@ -4690,7 +4658,6 @@
   {
     "deps": [
       "gpr", 
-      "gpr_test_util", 
       "grpc", 
       "grpc++", 
       "grpc++_test_util", 
@@ -4709,7 +4676,6 @@
   {
     "deps": [
       "gpr", 
-      "gpr_test_util", 
       "grpc", 
       "grpc++", 
       "grpc++_test_util", 
@@ -4728,7 +4694,6 @@
   {
     "deps": [
       "gpr", 
-      "gpr_test_util", 
       "grpc", 
       "grpc++", 
       "grpc++_test_util", 
@@ -4751,7 +4716,6 @@
   {
     "deps": [
       "gpr", 
-      "gpr_test_util", 
       "grpc++_test_util_unsecure", 
       "grpc++_unsecure", 
       "grpc_test_util_unsecure", 
@@ -4777,7 +4741,6 @@
   {
     "deps": [
       "gpr", 
-      "gpr_test_util", 
       "grpc", 
       "grpc++", 
       "grpc++_test_util", 
@@ -4796,7 +4759,6 @@
   {
     "deps": [
       "gpr", 
-      "gpr_test_util", 
       "grpc", 
       "grpc_test_util"
     ], 
@@ -4813,7 +4775,6 @@
   {
     "deps": [
       "gpr", 
-      "gpr_test_util", 
       "grpc", 
       "grpc_test_util"
     ], 
@@ -4830,7 +4791,6 @@
   {
     "deps": [
       "gpr", 
-      "gpr_test_util", 
       "grpc", 
       "grpc++_test_util", 
       "grpc_test_util"
@@ -4876,7 +4836,6 @@
   {
     "deps": [
       "gpr", 
-      "gpr_test_util", 
       "grpc", 
       "grpc++", 
       "grpc++_test_util", 
@@ -4895,7 +4854,6 @@
   {
     "deps": [
       "gpr", 
-      "gpr_test_util", 
       "grpc", 
       "grpc++", 
       "grpc++_test_config", 
@@ -4958,7 +4916,6 @@
   {
     "deps": [
       "gpr", 
-      "gpr_test_util", 
       "grpc++_test_util_unsecure", 
       "grpc++_unsecure", 
       "grpc_test_util_unsecure", 
@@ -4977,7 +4934,24 @@
   {
     "deps": [
       "gpr", 
-      "gpr_test_util", 
+      "grpc", 
+      "grpc++", 
+      "grpc++_test_util", 
+      "grpc_test_util"
+    ], 
+    "headers": [], 
+    "is_filegroup": false, 
+    "language": "c++", 
+    "name": "time_change_test", 
+    "src": [
+      "test/cpp/end2end/time_change_test.cc"
+    ], 
+    "third_party": false, 
+    "type": "target"
+  }, 
+  {
+    "deps": [
+      "gpr", 
       "grpc", 
       "grpc++", 
       "grpc++_test_util", 
@@ -5012,7 +4986,6 @@
   {
     "deps": [
       "gpr", 
-      "gpr_test_util", 
       "grpc", 
       "grpc++", 
       "grpc++_test_util", 
@@ -5800,7 +5773,6 @@
     "deps": [
       "bad_client_test", 
       "gpr", 
-      "gpr_test_util", 
       "grpc_test_util_unsecure", 
       "grpc_unsecure"
     ], 
@@ -5818,7 +5790,6 @@
     "deps": [
       "bad_client_test", 
       "gpr", 
-      "gpr_test_util", 
       "grpc_test_util_unsecure", 
       "grpc_unsecure"
     ], 
@@ -5836,7 +5807,6 @@
     "deps": [
       "bad_client_test", 
       "gpr", 
-      "gpr_test_util", 
       "grpc_test_util_unsecure", 
       "grpc_unsecure"
     ], 
@@ -5854,7 +5824,6 @@
     "deps": [
       "bad_client_test", 
       "gpr", 
-      "gpr_test_util", 
       "grpc_test_util_unsecure", 
       "grpc_unsecure"
     ], 
@@ -5872,7 +5841,6 @@
     "deps": [
       "bad_client_test", 
       "gpr", 
-      "gpr_test_util", 
       "grpc_test_util_unsecure", 
       "grpc_unsecure"
     ], 
@@ -5890,7 +5858,6 @@
     "deps": [
       "bad_client_test", 
       "gpr", 
-      "gpr_test_util", 
       "grpc_test_util_unsecure", 
       "grpc_unsecure"
     ], 
@@ -5908,7 +5875,6 @@
     "deps": [
       "bad_client_test", 
       "gpr", 
-      "gpr_test_util", 
       "grpc_test_util_unsecure", 
       "grpc_unsecure"
     ], 
@@ -5926,7 +5892,6 @@
     "deps": [
       "bad_client_test", 
       "gpr", 
-      "gpr_test_util", 
       "grpc_test_util_unsecure", 
       "grpc_unsecure"
     ], 
@@ -5944,7 +5909,6 @@
     "deps": [
       "bad_client_test", 
       "gpr", 
-      "gpr_test_util", 
       "grpc_test_util_unsecure", 
       "grpc_unsecure"
     ], 
@@ -5962,7 +5926,6 @@
     "deps": [
       "bad_client_test", 
       "gpr", 
-      "gpr_test_util", 
       "grpc_test_util_unsecure", 
       "grpc_unsecure"
     ], 
@@ -5980,7 +5943,6 @@
     "deps": [
       "bad_client_test", 
       "gpr", 
-      "gpr_test_util", 
       "grpc_test_util_unsecure", 
       "grpc_unsecure"
     ], 
@@ -5998,7 +5960,6 @@
     "deps": [
       "bad_ssl_test_server", 
       "gpr", 
-      "gpr_test_util", 
       "grpc", 
       "grpc_test_util"
     ], 
@@ -6015,7 +5976,6 @@
   {
     "deps": [
       "gpr", 
-      "gpr_test_util", 
       "grpc", 
       "grpc_test_util"
     ], 
@@ -6033,7 +5993,6 @@
     "deps": [
       "end2end_tests", 
       "gpr", 
-      "gpr_test_util", 
       "grpc", 
       "grpc_test_util"
     ], 
@@ -6051,7 +6010,6 @@
     "deps": [
       "end2end_tests", 
       "gpr", 
-      "gpr_test_util", 
       "grpc", 
       "grpc_test_util"
     ], 
@@ -6069,7 +6027,6 @@
     "deps": [
       "end2end_tests", 
       "gpr", 
-      "gpr_test_util", 
       "grpc", 
       "grpc_test_util"
     ], 
@@ -6087,7 +6044,6 @@
     "deps": [
       "end2end_tests", 
       "gpr", 
-      "gpr_test_util", 
       "grpc", 
       "grpc_test_util"
     ], 
@@ -6105,7 +6061,6 @@
     "deps": [
       "end2end_tests", 
       "gpr", 
-      "gpr_test_util", 
       "grpc", 
       "grpc_test_util"
     ], 
@@ -6123,7 +6078,6 @@
     "deps": [
       "end2end_tests", 
       "gpr", 
-      "gpr_test_util", 
       "grpc", 
       "grpc_test_util"
     ], 
@@ -6141,7 +6095,6 @@
     "deps": [
       "end2end_tests", 
       "gpr", 
-      "gpr_test_util", 
       "grpc", 
       "grpc_test_util"
     ], 
@@ -6159,7 +6112,6 @@
     "deps": [
       "end2end_tests", 
       "gpr", 
-      "gpr_test_util", 
       "grpc", 
       "grpc_test_util"
     ], 
@@ -6177,7 +6129,6 @@
     "deps": [
       "end2end_tests", 
       "gpr", 
-      "gpr_test_util", 
       "grpc", 
       "grpc_test_util"
     ], 
@@ -6195,16 +6146,15 @@
     "deps": [
       "end2end_tests", 
       "gpr", 
-      "gpr_test_util", 
       "grpc", 
       "grpc_test_util"
     ], 
     "headers": [], 
     "is_filegroup": false, 
     "language": "c", 
-    "name": "h2_local_test", 
+    "name": "h2_local_ipv4_test", 
     "src": [
-      "test/core/end2end/fixtures/h2_local.cc"
+      "test/core/end2end/fixtures/h2_local_ipv4.cc"
     ], 
     "third_party": false, 
     "type": "target"
@@ -6213,7 +6163,40 @@
     "deps": [
       "end2end_tests", 
       "gpr", 
-      "gpr_test_util", 
+      "grpc", 
+      "grpc_test_util"
+    ], 
+    "headers": [], 
+    "is_filegroup": false, 
+    "language": "c", 
+    "name": "h2_local_ipv6_test", 
+    "src": [
+      "test/core/end2end/fixtures/h2_local_ipv6.cc"
+    ], 
+    "third_party": false, 
+    "type": "target"
+  }, 
+  {
+    "deps": [
+      "end2end_tests", 
+      "gpr", 
+      "grpc", 
+      "grpc_test_util"
+    ], 
+    "headers": [], 
+    "is_filegroup": false, 
+    "language": "c", 
+    "name": "h2_local_uds_test", 
+    "src": [
+      "test/core/end2end/fixtures/h2_local_uds.cc"
+    ], 
+    "third_party": false, 
+    "type": "target"
+  }, 
+  {
+    "deps": [
+      "end2end_tests", 
+      "gpr", 
       "grpc", 
       "grpc_test_util"
     ], 
@@ -6231,7 +6214,6 @@
     "deps": [
       "end2end_tests", 
       "gpr", 
-      "gpr_test_util", 
       "grpc", 
       "grpc_test_util"
     ], 
@@ -6249,7 +6231,6 @@
     "deps": [
       "end2end_tests", 
       "gpr", 
-      "gpr_test_util", 
       "grpc", 
       "grpc_test_util"
     ], 
@@ -6267,7 +6248,6 @@
     "deps": [
       "end2end_tests", 
       "gpr", 
-      "gpr_test_util", 
       "grpc", 
       "grpc_test_util"
     ], 
@@ -6285,7 +6265,6 @@
     "deps": [
       "end2end_tests", 
       "gpr", 
-      "gpr_test_util", 
       "grpc", 
       "grpc_test_util"
     ], 
@@ -6303,7 +6282,6 @@
     "deps": [
       "end2end_tests", 
       "gpr", 
-      "gpr_test_util", 
       "grpc", 
       "grpc_test_util"
     ], 
@@ -6321,7 +6299,6 @@
     "deps": [
       "end2end_tests", 
       "gpr", 
-      "gpr_test_util", 
       "grpc", 
       "grpc_test_util"
     ], 
@@ -6339,7 +6316,6 @@
     "deps": [
       "end2end_tests", 
       "gpr", 
-      "gpr_test_util", 
       "grpc", 
       "grpc_test_util"
     ], 
@@ -6357,7 +6333,6 @@
     "deps": [
       "end2end_tests", 
       "gpr", 
-      "gpr_test_util", 
       "grpc", 
       "grpc_test_util"
     ], 
@@ -6375,7 +6350,6 @@
     "deps": [
       "end2end_nosec_tests", 
       "gpr", 
-      "gpr_test_util", 
       "grpc_test_util_unsecure", 
       "grpc_unsecure"
     ], 
@@ -6393,7 +6367,6 @@
     "deps": [
       "end2end_nosec_tests", 
       "gpr", 
-      "gpr_test_util", 
       "grpc_test_util_unsecure", 
       "grpc_unsecure"
     ], 
@@ -6411,7 +6384,6 @@
     "deps": [
       "end2end_nosec_tests", 
       "gpr", 
-      "gpr_test_util", 
       "grpc_test_util_unsecure", 
       "grpc_unsecure"
     ], 
@@ -6429,7 +6401,6 @@
     "deps": [
       "end2end_nosec_tests", 
       "gpr", 
-      "gpr_test_util", 
       "grpc_test_util_unsecure", 
       "grpc_unsecure"
     ], 
@@ -6447,7 +6418,6 @@
     "deps": [
       "end2end_nosec_tests", 
       "gpr", 
-      "gpr_test_util", 
       "grpc_test_util_unsecure", 
       "grpc_unsecure"
     ], 
@@ -6465,7 +6435,6 @@
     "deps": [
       "end2end_nosec_tests", 
       "gpr", 
-      "gpr_test_util", 
       "grpc_test_util_unsecure", 
       "grpc_unsecure"
     ], 
@@ -6483,7 +6452,6 @@
     "deps": [
       "end2end_nosec_tests", 
       "gpr", 
-      "gpr_test_util", 
       "grpc_test_util_unsecure", 
       "grpc_unsecure"
     ], 
@@ -6501,7 +6469,6 @@
     "deps": [
       "end2end_nosec_tests", 
       "gpr", 
-      "gpr_test_util", 
       "grpc_test_util_unsecure", 
       "grpc_unsecure"
     ], 
@@ -6519,7 +6486,6 @@
     "deps": [
       "end2end_nosec_tests", 
       "gpr", 
-      "gpr_test_util", 
       "grpc_test_util_unsecure", 
       "grpc_unsecure"
     ], 
@@ -6537,7 +6503,6 @@
     "deps": [
       "end2end_nosec_tests", 
       "gpr", 
-      "gpr_test_util", 
       "grpc_test_util_unsecure", 
       "grpc_unsecure"
     ], 
@@ -6555,7 +6520,6 @@
     "deps": [
       "end2end_nosec_tests", 
       "gpr", 
-      "gpr_test_util", 
       "grpc_test_util_unsecure", 
       "grpc_unsecure"
     ], 
@@ -6573,7 +6537,6 @@
     "deps": [
       "end2end_nosec_tests", 
       "gpr", 
-      "gpr_test_util", 
       "grpc_test_util_unsecure", 
       "grpc_unsecure"
     ], 
@@ -6591,7 +6554,6 @@
     "deps": [
       "end2end_nosec_tests", 
       "gpr", 
-      "gpr_test_util", 
       "grpc_test_util_unsecure", 
       "grpc_unsecure"
     ], 
@@ -6608,7 +6570,6 @@
   {
     "deps": [
       "gpr", 
-      "gpr_test_util", 
       "grpc++_test_config", 
       "grpc++_test_util_unsecure", 
       "grpc++_unsecure", 
@@ -6628,7 +6589,6 @@
   {
     "deps": [
       "gpr", 
-      "gpr_test_util", 
       "grpc", 
       "grpc++", 
       "grpc++_test_config", 
@@ -6648,7 +6608,6 @@
   {
     "deps": [
       "gpr", 
-      "gpr_test_util", 
       "grpc", 
       "grpc++", 
       "grpc++_test_config", 
@@ -6668,7 +6627,6 @@
   {
     "deps": [
       "gpr", 
-      "gpr_test_util", 
       "grpc", 
       "grpc++", 
       "grpc++_test_config", 
@@ -6688,7 +6646,6 @@
   {
     "deps": [
       "gpr", 
-      "gpr_test_util", 
       "grpc++_test_config", 
       "grpc++_test_util_unsecure", 
       "grpc++_unsecure", 
@@ -6708,7 +6665,6 @@
   {
     "deps": [
       "gpr", 
-      "gpr_test_util", 
       "grpc", 
       "grpc++", 
       "grpc++_test_config", 
@@ -6728,7 +6684,6 @@
   {
     "deps": [
       "gpr", 
-      "gpr_test_util", 
       "grpc", 
       "grpc++", 
       "grpc++_test_config", 
@@ -6748,7 +6703,6 @@
   {
     "deps": [
       "gpr", 
-      "gpr_test_util", 
       "grpc", 
       "grpc_test_util"
     ], 
@@ -6766,7 +6720,6 @@
   {
     "deps": [
       "gpr", 
-      "gpr_test_util", 
       "grpc", 
       "grpc_test_util"
     ], 
@@ -6784,7 +6737,6 @@
   {
     "deps": [
       "gpr", 
-      "gpr_test_util", 
       "grpc", 
       "grpc_test_util"
     ], 
@@ -6802,7 +6754,6 @@
   {
     "deps": [
       "gpr", 
-      "gpr_test_util", 
       "grpc", 
       "grpc_test_util"
     ], 
@@ -6820,7 +6771,6 @@
   {
     "deps": [
       "gpr", 
-      "gpr_test_util", 
       "grpc", 
       "grpc_test_util"
     ], 
@@ -6838,7 +6788,6 @@
   {
     "deps": [
       "gpr", 
-      "gpr_test_util", 
       "grpc", 
       "grpc_test_util"
     ], 
@@ -6856,7 +6805,6 @@
   {
     "deps": [
       "gpr", 
-      "gpr_test_util", 
       "grpc", 
       "grpc_test_util"
     ], 
@@ -6874,7 +6822,6 @@
   {
     "deps": [
       "gpr", 
-      "gpr_test_util", 
       "grpc", 
       "grpc_test_util"
     ], 
@@ -6892,7 +6839,6 @@
   {
     "deps": [
       "gpr", 
-      "gpr_test_util", 
       "grpc", 
       "grpc_test_util"
     ], 
@@ -6910,7 +6856,6 @@
   {
     "deps": [
       "gpr", 
-      "gpr_test_util", 
       "grpc", 
       "grpc_test_util"
     ], 
@@ -6928,7 +6873,6 @@
   {
     "deps": [
       "gpr", 
-      "gpr_test_util", 
       "grpc", 
       "grpc_test_util"
     ], 
@@ -6946,7 +6890,6 @@
   {
     "deps": [
       "gpr", 
-      "gpr_test_util", 
       "grpc", 
       "grpc_test_util"
     ], 
@@ -6964,7 +6907,6 @@
   {
     "deps": [
       "gpr", 
-      "gpr_test_util", 
       "grpc", 
       "grpc_test_util"
     ], 
@@ -6982,7 +6924,6 @@
   {
     "deps": [
       "gpr", 
-      "gpr_test_util", 
       "grpc", 
       "grpc_test_util"
     ], 
@@ -7054,23 +6995,6 @@
   }, 
   {
     "deps": [
-      "gpr"
-    ], 
-    "headers": [
-      "test/core/util/test_config.h"
-    ], 
-    "is_filegroup": false, 
-    "language": "c", 
-    "name": "gpr_test_util", 
-    "src": [
-      "test/core/util/test_config.cc", 
-      "test/core/util/test_config.h"
-    ], 
-    "third_party": false, 
-    "type": "lib"
-  }, 
-  {
-    "deps": [
       "census", 
       "gpr", 
       "grpc_base", 
@@ -7125,7 +7049,6 @@
   {
     "deps": [
       "gpr", 
-      "gpr_test_util", 
       "grpc", 
       "grpc_test_util_base"
     ], 
@@ -7151,7 +7074,6 @@
   {
     "deps": [
       "gpr", 
-      "gpr_test_util", 
       "grpc_test_util_base", 
       "grpc_unsecure"
     ], 
@@ -7200,7 +7122,6 @@
   {
     "deps": [
       "gpr", 
-      "gpr_test_util", 
       "grpc", 
       "grpc_test_util", 
       "test_tcp_server"
@@ -7221,7 +7142,6 @@
   {
     "deps": [
       "gpr", 
-      "gpr_test_util", 
       "grpc", 
       "grpc_test_util"
     ], 
@@ -7427,6 +7347,10 @@
       "src/proto/grpc/testing/echo_messages.pb.h", 
       "src/proto/grpc/testing/echo_messages_mock.grpc.pb.h", 
       "src/proto/grpc/testing/echo_mock.grpc.pb.h", 
+      "src/proto/grpc/testing/simple_messages.grpc.pb.h", 
+      "src/proto/grpc/testing/simple_messages.pb.h", 
+      "src/proto/grpc/testing/simple_messages_mock.grpc.pb.h", 
+      "test/cpp/end2end/test_health_check_service_impl.h", 
       "test/cpp/end2end/test_service_impl.h", 
       "test/cpp/util/byte_buffer_proto_helper.h", 
       "test/cpp/util/channel_trace_proto_helper.h", 
@@ -7439,6 +7363,8 @@
     "language": "c++", 
     "name": "grpc++_test_util", 
     "src": [
+      "test/cpp/end2end/test_health_check_service_impl.cc", 
+      "test/cpp/end2end/test_health_check_service_impl.h", 
       "test/cpp/end2end/test_service_impl.cc", 
       "test/cpp/end2end/test_service_impl.h", 
       "test/cpp/util/byte_buffer_proto_helper.cc", 
@@ -7480,6 +7406,10 @@
       "src/proto/grpc/testing/echo_messages.pb.h", 
       "src/proto/grpc/testing/echo_messages_mock.grpc.pb.h", 
       "src/proto/grpc/testing/echo_mock.grpc.pb.h", 
+      "src/proto/grpc/testing/simple_messages.grpc.pb.h", 
+      "src/proto/grpc/testing/simple_messages.pb.h", 
+      "src/proto/grpc/testing/simple_messages_mock.grpc.pb.h", 
+      "test/cpp/end2end/test_health_check_service_impl.h", 
       "test/cpp/end2end/test_service_impl.h", 
       "test/cpp/util/byte_buffer_proto_helper.h", 
       "test/cpp/util/string_ref_helper.h", 
@@ -7489,6 +7419,8 @@
     "language": "c++", 
     "name": "grpc++_test_util_unsecure", 
     "src": [
+      "test/cpp/end2end/test_health_check_service_impl.cc", 
+      "test/cpp/end2end/test_health_check_service_impl.h", 
       "test/cpp/end2end/test_service_impl.cc", 
       "test/cpp/end2end/test_service_impl.h", 
       "test/cpp/util/byte_buffer_proto_helper.cc", 
@@ -7722,7 +7654,6 @@
   {
     "deps": [
       "gpr", 
-      "gpr_test_util", 
       "grpc", 
       "grpc++", 
       "grpc++_test_config", 
@@ -7777,7 +7708,6 @@
   {
     "deps": [
       "gpr", 
-      "gpr_test_util", 
       "grpc", 
       "grpc++", 
       "grpc++_test_config", 
@@ -8864,7 +8794,6 @@
   {
     "deps": [
       "gpr", 
-      "gpr_test_util", 
       "grpc_test_util_unsecure", 
       "grpc_unsecure"
     ], 
@@ -8884,7 +8813,6 @@
   {
     "deps": [
       "gpr", 
-      "gpr_test_util", 
       "grpc", 
       "grpc_test_util"
     ], 
@@ -8904,7 +8832,6 @@
   {
     "deps": [
       "gpr", 
-      "gpr_test_util", 
       "grpc", 
       "grpc_test_util"
     ], 
@@ -8955,7 +8882,6 @@
       "test/core/end2end/tests/max_connection_idle.cc", 
       "test/core/end2end/tests/max_message_length.cc", 
       "test/core/end2end/tests/negative_deadline.cc", 
-      "test/core/end2end/tests/network_status_change.cc", 
       "test/core/end2end/tests/no_error_on_hotpath.cc", 
       "test/core/end2end/tests/no_logging.cc", 
       "test/core/end2end/tests/no_op.cc", 
@@ -9005,7 +8931,6 @@
   {
     "deps": [
       "gpr", 
-      "gpr_test_util", 
       "grpc_test_util_unsecure", 
       "grpc_unsecure"
     ], 
@@ -9055,7 +8980,6 @@
       "test/core/end2end/tests/max_connection_idle.cc", 
       "test/core/end2end/tests/max_message_length.cc", 
       "test/core/end2end/tests/negative_deadline.cc", 
-      "test/core/end2end/tests/network_status_change.cc", 
       "test/core/end2end/tests/no_error_on_hotpath.cc", 
       "test/core/end2end/tests/no_logging.cc", 
       "test/core/end2end/tests/no_op.cc", 
@@ -9516,7 +9440,6 @@
       "src/core/lib/channel/channelz_registry.cc", 
       "src/core/lib/channel/connected_channel.cc", 
       "src/core/lib/channel/handshaker.cc", 
-      "src/core/lib/channel/handshaker_factory.cc", 
       "src/core/lib/channel/handshaker_registry.cc", 
       "src/core/lib/channel/status_util.cc", 
       "src/core/lib/compression/compression.cc", 
@@ -9550,6 +9473,8 @@
       "src/core/lib/iomgr/gethostname_fallback.cc", 
       "src/core/lib/iomgr/gethostname_host_name_max.cc", 
       "src/core/lib/iomgr/gethostname_sysconf.cc", 
+      "src/core/lib/iomgr/grpc_if_nametoindex_posix.cc", 
+      "src/core/lib/iomgr/grpc_if_nametoindex_unsupported.cc", 
       "src/core/lib/iomgr/internal_errqueue.cc", 
       "src/core/lib/iomgr/iocp_windows.cc", 
       "src/core/lib/iomgr/iomgr.cc", 
@@ -9561,7 +9486,6 @@
       "src/core/lib/iomgr/is_epollexclusive_available.cc", 
       "src/core/lib/iomgr/load_file.cc", 
       "src/core/lib/iomgr/lockfree_event.cc", 
-      "src/core/lib/iomgr/network_status_tracker.cc", 
       "src/core/lib/iomgr/polling_entity.cc", 
       "src/core/lib/iomgr/pollset.cc", 
       "src/core/lib/iomgr/pollset_custom.cc", 
@@ -9704,6 +9628,7 @@
       "src/core/lib/debug/stats_data.h", 
       "src/core/lib/gprpp/debug_location.h", 
       "src/core/lib/gprpp/inlined_vector.h", 
+      "src/core/lib/gprpp/optional.h", 
       "src/core/lib/gprpp/orphanable.h", 
       "src/core/lib/gprpp/ref_counted.h", 
       "src/core/lib/gprpp/ref_counted_ptr.h", 
@@ -9715,6 +9640,7 @@
       "src/core/lib/iomgr/call_combiner.h", 
       "src/core/lib/iomgr/closure.h", 
       "src/core/lib/iomgr/combiner.h", 
+      "src/core/lib/iomgr/dynamic_annotations.h", 
       "src/core/lib/iomgr/endpoint.h", 
       "src/core/lib/iomgr/endpoint_pair.h", 
       "src/core/lib/iomgr/error.h", 
@@ -9726,6 +9652,7 @@
       "src/core/lib/iomgr/exec_ctx.h", 
       "src/core/lib/iomgr/executor.h", 
       "src/core/lib/iomgr/gethostname.h", 
+      "src/core/lib/iomgr/grpc_if_nametoindex.h", 
       "src/core/lib/iomgr/internal_errqueue.h", 
       "src/core/lib/iomgr/iocp_windows.h", 
       "src/core/lib/iomgr/iomgr.h", 
@@ -9736,7 +9663,6 @@
       "src/core/lib/iomgr/load_file.h", 
       "src/core/lib/iomgr/lockfree_event.h", 
       "src/core/lib/iomgr/nameser.h", 
-      "src/core/lib/iomgr/network_status_tracker.h", 
       "src/core/lib/iomgr/polling_entity.h", 
       "src/core/lib/iomgr/pollset.h", 
       "src/core/lib/iomgr/pollset_custom.h", 
@@ -9856,6 +9782,7 @@
       "src/core/lib/debug/stats_data.h", 
       "src/core/lib/gprpp/debug_location.h", 
       "src/core/lib/gprpp/inlined_vector.h", 
+      "src/core/lib/gprpp/optional.h", 
       "src/core/lib/gprpp/orphanable.h", 
       "src/core/lib/gprpp/ref_counted.h", 
       "src/core/lib/gprpp/ref_counted_ptr.h", 
@@ -9867,6 +9794,7 @@
       "src/core/lib/iomgr/call_combiner.h", 
       "src/core/lib/iomgr/closure.h", 
       "src/core/lib/iomgr/combiner.h", 
+      "src/core/lib/iomgr/dynamic_annotations.h", 
       "src/core/lib/iomgr/endpoint.h", 
       "src/core/lib/iomgr/endpoint_pair.h", 
       "src/core/lib/iomgr/error.h", 
@@ -9878,6 +9806,7 @@
       "src/core/lib/iomgr/exec_ctx.h", 
       "src/core/lib/iomgr/executor.h", 
       "src/core/lib/iomgr/gethostname.h", 
+      "src/core/lib/iomgr/grpc_if_nametoindex.h", 
       "src/core/lib/iomgr/internal_errqueue.h", 
       "src/core/lib/iomgr/iocp_windows.h", 
       "src/core/lib/iomgr/iomgr.h", 
@@ -9888,7 +9817,6 @@
       "src/core/lib/iomgr/load_file.h", 
       "src/core/lib/iomgr/lockfree_event.h", 
       "src/core/lib/iomgr/nameser.h", 
-      "src/core/lib/iomgr/network_status_tracker.h", 
       "src/core/lib/iomgr/polling_entity.h", 
       "src/core/lib/iomgr/pollset.h", 
       "src/core/lib/iomgr/pollset_custom.h", 
@@ -10029,22 +9957,26 @@
       "src/core/ext/filters/client_channel/client_channel_channelz.h", 
       "src/core/ext/filters/client_channel/client_channel_factory.h", 
       "src/core/ext/filters/client_channel/connector.h", 
+      "src/core/ext/filters/client_channel/global_subchannel_pool.h", 
       "src/core/ext/filters/client_channel/health/health_check_client.h", 
       "src/core/ext/filters/client_channel/http_connect_handshaker.h", 
       "src/core/ext/filters/client_channel/http_proxy.h", 
       "src/core/ext/filters/client_channel/lb_policy.h", 
       "src/core/ext/filters/client_channel/lb_policy_factory.h", 
       "src/core/ext/filters/client_channel/lb_policy_registry.h", 
+      "src/core/ext/filters/client_channel/local_subchannel_pool.h", 
       "src/core/ext/filters/client_channel/parse_address.h", 
       "src/core/ext/filters/client_channel/proxy_mapper.h", 
       "src/core/ext/filters/client_channel/proxy_mapper_registry.h", 
+      "src/core/ext/filters/client_channel/request_routing.h", 
       "src/core/ext/filters/client_channel/resolver.h", 
       "src/core/ext/filters/client_channel/resolver_factory.h", 
       "src/core/ext/filters/client_channel/resolver_registry.h", 
       "src/core/ext/filters/client_channel/resolver_result_parsing.h", 
       "src/core/ext/filters/client_channel/retry_throttle.h", 
+      "src/core/ext/filters/client_channel/server_address.h", 
       "src/core/ext/filters/client_channel/subchannel.h", 
-      "src/core/ext/filters/client_channel/subchannel_index.h"
+      "src/core/ext/filters/client_channel/subchannel_pool_interface.h"
     ], 
     "is_filegroup": true, 
     "language": "c", 
@@ -10062,6 +9994,8 @@
       "src/core/ext/filters/client_channel/client_channel_plugin.cc", 
       "src/core/ext/filters/client_channel/connector.cc", 
       "src/core/ext/filters/client_channel/connector.h", 
+      "src/core/ext/filters/client_channel/global_subchannel_pool.cc", 
+      "src/core/ext/filters/client_channel/global_subchannel_pool.h", 
       "src/core/ext/filters/client_channel/health/health_check_client.cc", 
       "src/core/ext/filters/client_channel/health/health_check_client.h", 
       "src/core/ext/filters/client_channel/http_connect_handshaker.cc", 
@@ -10070,16 +10004,19 @@
       "src/core/ext/filters/client_channel/http_proxy.h", 
       "src/core/ext/filters/client_channel/lb_policy.cc", 
       "src/core/ext/filters/client_channel/lb_policy.h", 
-      "src/core/ext/filters/client_channel/lb_policy_factory.cc", 
       "src/core/ext/filters/client_channel/lb_policy_factory.h", 
       "src/core/ext/filters/client_channel/lb_policy_registry.cc", 
       "src/core/ext/filters/client_channel/lb_policy_registry.h", 
+      "src/core/ext/filters/client_channel/local_subchannel_pool.cc", 
+      "src/core/ext/filters/client_channel/local_subchannel_pool.h", 
       "src/core/ext/filters/client_channel/parse_address.cc", 
       "src/core/ext/filters/client_channel/parse_address.h", 
       "src/core/ext/filters/client_channel/proxy_mapper.cc", 
       "src/core/ext/filters/client_channel/proxy_mapper.h", 
       "src/core/ext/filters/client_channel/proxy_mapper_registry.cc", 
       "src/core/ext/filters/client_channel/proxy_mapper_registry.h", 
+      "src/core/ext/filters/client_channel/request_routing.cc", 
+      "src/core/ext/filters/client_channel/request_routing.h", 
       "src/core/ext/filters/client_channel/resolver.cc", 
       "src/core/ext/filters/client_channel/resolver.h", 
       "src/core/ext/filters/client_channel/resolver_factory.h", 
@@ -10089,10 +10026,12 @@
       "src/core/ext/filters/client_channel/resolver_result_parsing.h", 
       "src/core/ext/filters/client_channel/retry_throttle.cc", 
       "src/core/ext/filters/client_channel/retry_throttle.h", 
+      "src/core/ext/filters/client_channel/server_address.cc", 
+      "src/core/ext/filters/client_channel/server_address.h", 
       "src/core/ext/filters/client_channel/subchannel.cc", 
       "src/core/ext/filters/client_channel/subchannel.h", 
-      "src/core/ext/filters/client_channel/subchannel_index.cc", 
-      "src/core/ext/filters/client_channel/subchannel_index.h"
+      "src/core/ext/filters/client_channel/subchannel_pool_interface.cc", 
+      "src/core/ext/filters/client_channel/subchannel_pool_interface.h"
     ], 
     "third_party": false, 
     "type": "filegroup"
@@ -10496,6 +10435,7 @@
       "src/core/lib/security/credentials/oauth2/oauth2_credentials.h", 
       "src/core/lib/security/credentials/plugin/plugin_credentials.h", 
       "src/core/lib/security/credentials/ssl/ssl_credentials.h", 
+      "src/core/lib/security/credentials/tls/grpc_tls_credentials_options.h", 
       "src/core/lib/security/security_connector/alts/alts_security_connector.h", 
       "src/core/lib/security/security_connector/fake/fake_security_connector.h", 
       "src/core/lib/security/security_connector/load_system_roots.h", 
@@ -10549,6 +10489,8 @@
       "src/core/lib/security/credentials/plugin/plugin_credentials.h", 
       "src/core/lib/security/credentials/ssl/ssl_credentials.cc", 
       "src/core/lib/security/credentials/ssl/ssl_credentials.h", 
+      "src/core/lib/security/credentials/tls/grpc_tls_credentials_options.cc", 
+      "src/core/lib/security/credentials/tls/grpc_tls_credentials_options.h", 
       "src/core/lib/security/security_connector/alts/alts_security_connector.cc", 
       "src/core/lib/security/security_connector/alts/alts_security_connector.h", 
       "src/core/lib/security/security_connector/fake/fake_security_connector.cc", 
@@ -10619,7 +10561,6 @@
     "deps": [
       "cmdline", 
       "gpr", 
-      "gpr_test_util", 
       "grpc_base", 
       "grpc_client_channel", 
       "grpc_transport_chttp2"
@@ -10628,6 +10569,7 @@
       "src/core/ext/filters/client_channel/resolver/fake/fake_resolver.h", 
       "test/core/end2end/cq_verifier.h", 
       "test/core/end2end/fixtures/http_proxy_fixture.h", 
+      "test/core/end2end/fixtures/local_util.h", 
       "test/core/end2end/fixtures/proxy.h", 
       "test/core/iomgr/endpoint_tests.h", 
       "test/core/util/debugger_macros.h", 
@@ -10642,6 +10584,8 @@
       "test/core/util/port_server_client.h", 
       "test/core/util/slice_splitter.h", 
       "test/core/util/subprocess.h", 
+      "test/core/util/test_config.h", 
+      "test/core/util/test_lb_policies.h", 
       "test/core/util/tracer_util.h", 
       "test/core/util/trickle_endpoint.h"
     ], 
@@ -10655,6 +10599,8 @@
       "test/core/end2end/cq_verifier.h", 
       "test/core/end2end/fixtures/http_proxy_fixture.cc", 
       "test/core/end2end/fixtures/http_proxy_fixture.h", 
+      "test/core/end2end/fixtures/local_util.cc", 
+      "test/core/end2end/fixtures/local_util.h", 
       "test/core/end2end/fixtures/proxy.cc", 
       "test/core/end2end/fixtures/proxy.h", 
       "test/core/iomgr/endpoint_tests.cc", 
@@ -10685,6 +10631,10 @@
       "test/core/util/subprocess.h", 
       "test/core/util/subprocess_posix.cc", 
       "test/core/util/subprocess_windows.cc", 
+      "test/core/util/test_config.cc", 
+      "test/core/util/test_config.h", 
+      "test/core/util/test_lb_policies.cc", 
+      "test/core/util/test_lb_policies.h", 
       "test/core/util/tracer_util.cc", 
       "test/core/util/tracer_util.h", 
       "test/core/util/trickle_endpoint.cc", 
@@ -10736,6 +10686,7 @@
       "src/core/ext/transport/chttp2/transport/bin_decoder.h", 
       "src/core/ext/transport/chttp2/transport/bin_encoder.h", 
       "src/core/ext/transport/chttp2/transport/chttp2_transport.h", 
+      "src/core/ext/transport/chttp2/transport/context_list.h", 
       "src/core/ext/transport/chttp2/transport/flow_control.h", 
       "src/core/ext/transport/chttp2/transport/frame.h", 
       "src/core/ext/transport/chttp2/transport/frame_data.h", 
@@ -10765,6 +10716,8 @@
       "src/core/ext/transport/chttp2/transport/chttp2_plugin.cc", 
       "src/core/ext/transport/chttp2/transport/chttp2_transport.cc", 
       "src/core/ext/transport/chttp2/transport/chttp2_transport.h", 
+      "src/core/ext/transport/chttp2/transport/context_list.cc", 
+      "src/core/ext/transport/chttp2/transport/context_list.h", 
       "src/core/ext/transport/chttp2/transport/flow_control.cc", 
       "src/core/ext/transport/chttp2/transport/flow_control.h", 
       "src/core/ext/transport/chttp2/transport/frame.h", 
@@ -11411,6 +11364,7 @@
       "include/grpc++/support/sync_stream.h", 
       "include/grpc++/support/time.h", 
       "include/grpcpp/alarm.h", 
+      "include/grpcpp/alarm_impl.h", 
       "include/grpcpp/channel.h", 
       "include/grpcpp/client_context.h", 
       "include/grpcpp/completion_queue.h", 
@@ -11448,10 +11402,13 @@
       "include/grpcpp/support/byte_buffer.h", 
       "include/grpcpp/support/channel_arguments.h", 
       "include/grpcpp/support/client_callback.h", 
+      "include/grpcpp/support/client_interceptor.h", 
       "include/grpcpp/support/config.h", 
+      "include/grpcpp/support/interceptor.h", 
       "include/grpcpp/support/proto_buffer_reader.h", 
       "include/grpcpp/support/proto_buffer_writer.h", 
       "include/grpcpp/support/server_callback.h", 
+      "include/grpcpp/support/server_interceptor.h", 
       "include/grpcpp/support/slice.h", 
       "include/grpcpp/support/status.h", 
       "include/grpcpp/support/status_code_enum.h", 
@@ -11516,6 +11473,7 @@
       "include/grpc++/support/sync_stream.h", 
       "include/grpc++/support/time.h", 
       "include/grpcpp/alarm.h", 
+      "include/grpcpp/alarm_impl.h", 
       "include/grpcpp/channel.h", 
       "include/grpcpp/client_context.h", 
       "include/grpcpp/completion_queue.h", 
@@ -11553,10 +11511,13 @@
       "include/grpcpp/support/byte_buffer.h", 
       "include/grpcpp/support/channel_arguments.h", 
       "include/grpcpp/support/client_callback.h", 
+      "include/grpcpp/support/client_interceptor.h", 
       "include/grpcpp/support/config.h", 
+      "include/grpcpp/support/interceptor.h", 
       "include/grpcpp/support/proto_buffer_reader.h", 
       "include/grpcpp/support/proto_buffer_writer.h", 
       "include/grpcpp/support/server_callback.h", 
+      "include/grpcpp/support/server_interceptor.h", 
       "include/grpcpp/support/slice.h", 
       "include/grpcpp/support/status.h", 
       "include/grpcpp/support/status_code_enum.h", 

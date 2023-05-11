@@ -18,6 +18,7 @@
 
 #include <functional>
 #include <mutex>
+#include <sstream>
 #include <thread>
 
 #include <grpcpp/channel.h>
@@ -30,7 +31,9 @@
 #include <grpcpp/server_context.h>
 #include <grpcpp/support/client_callback.h>
 
+#include "src/core/lib/iomgr/iomgr.h"
 #include "src/proto/grpc/testing/echo.grpc.pb.h"
+#include "test/core/util/port.h"
 #include "test/core/util/test_config.h"
 #include "test/cpp/end2end/test_service_impl.h"
 #include "test/cpp/util/byte_buffer_proto_helper.h"
@@ -38,15 +41,30 @@
 
 #include <gtest/gtest.h>
 
+// MAYBE_SKIP_TEST is a macro to determine if this particular test configuration
+// should be skipped based on a decision made at SetUp time. In particular, any
+// callback tests can only be run if the iomgr can run in the background or if
+// the transport is in-process.
+#define MAYBE_SKIP_TEST \
+  do {                  \
+    if (do_not_test_) { \
+      return;           \
+    }                   \
+  } while (0)
+
 namespace grpc {
 namespace testing {
 namespace {
 
+enum class Protocol { INPROC, TCP };
+
 class TestScenario {
  public:
-  TestScenario(bool serve_callback) : callback_server(serve_callback) {}
+  TestScenario(bool serve_callback, Protocol protocol)
+      : callback_server(serve_callback), protocol(protocol) {}
   void Log() const;
   bool callback_server;
+  Protocol protocol;
 };
 
 static std::ostream& operator<<(std::ostream& out,
@@ -69,6 +87,16 @@ class ClientCallbackEnd2endTest
   void SetUp() override {
     ServerBuilder builder;
 
+    if (GetParam().protocol == Protocol::TCP) {
+      if (!grpc_iomgr_run_in_background()) {
+        do_not_test_ = true;
+        return;
+      }
+      int port = grpc_pick_unused_port_or_die();
+      server_address_ << "localhost:" << port;
+      builder.AddListeningPort(server_address_.str(),
+                               InsecureServerCredentials());
+    }
     if (!GetParam().callback_server) {
       builder.RegisterService(&service_);
     } else {
@@ -81,7 +109,17 @@ class ClientCallbackEnd2endTest
 
   void ResetStub() {
     ChannelArguments args;
-    channel_ = server_->InProcessChannel(args);
+    switch (GetParam().protocol) {
+      case Protocol::TCP:
+        channel_ =
+            CreateChannel(server_address_.str(), InsecureChannelCredentials());
+        break;
+      case Protocol::INPROC:
+        channel_ = server_->InProcessChannel(args);
+        break;
+      default:
+        assert(false);
+    }
     stub_ = grpc::testing::EchoTestService::NewStub(channel_);
     generic_stub_.reset(new GenericStub(channel_));
   }
@@ -182,43 +220,157 @@ class ClientCallbackEnd2endTest
     }
   }
 
-  bool is_server_started_;
+  void SendGenericEchoAsBidi(int num_rpcs, int reuses) {
+    const grpc::string kMethodName("/grpc.testing.EchoTestService/Echo");
+    grpc::string test_string("");
+    for (int i = 0; i < num_rpcs; i++) {
+      test_string += "Hello world. ";
+      class Client : public grpc::experimental::ClientBidiReactor<ByteBuffer,
+                                                                  ByteBuffer> {
+       public:
+        Client(ClientCallbackEnd2endTest* test, const grpc::string& method_name,
+               const grpc::string& test_str, int reuses)
+            : reuses_remaining_(reuses) {
+          activate_ = [this, test, method_name, test_str] {
+            if (reuses_remaining_ > 0) {
+              cli_ctx_.reset(new ClientContext);
+              reuses_remaining_--;
+              test->generic_stub_->experimental().PrepareBidiStreamingCall(
+                  cli_ctx_.get(), method_name, this);
+              request_.set_message(test_str);
+              send_buf_ = SerializeToByteBuffer(&request_);
+              StartWrite(send_buf_.get());
+              StartRead(&recv_buf_);
+              StartCall();
+            } else {
+              std::unique_lock<std::mutex> l(mu_);
+              done_ = true;
+              cv_.notify_one();
+            }
+          };
+          activate_();
+        }
+        void OnWriteDone(bool ok) override { StartWritesDone(); }
+        void OnReadDone(bool ok) override {
+          EchoResponse response;
+          EXPECT_TRUE(ParseFromByteBuffer(&recv_buf_, &response));
+          EXPECT_EQ(request_.message(), response.message());
+        };
+        void OnDone(const Status& s) override {
+          EXPECT_TRUE(s.ok());
+          activate_();
+        }
+        void Await() {
+          std::unique_lock<std::mutex> l(mu_);
+          while (!done_) {
+            cv_.wait(l);
+          }
+        }
+
+        EchoRequest request_;
+        std::unique_ptr<ByteBuffer> send_buf_;
+        ByteBuffer recv_buf_;
+        std::unique_ptr<ClientContext> cli_ctx_;
+        int reuses_remaining_;
+        std::function<void()> activate_;
+        std::mutex mu_;
+        std::condition_variable cv_;
+        bool done_ = false;
+      } rpc{this, kMethodName, test_string, reuses};
+
+      rpc.Await();
+    }
+  }
+  bool do_not_test_{false};
+  bool is_server_started_{false};
   std::shared_ptr<Channel> channel_;
   std::unique_ptr<grpc::testing::EchoTestService::Stub> stub_;
   std::unique_ptr<grpc::GenericStub> generic_stub_;
   TestServiceImpl service_;
   CallbackTestServiceImpl callback_service_;
   std::unique_ptr<Server> server_;
+  std::ostringstream server_address_;
 };
 
 TEST_P(ClientCallbackEnd2endTest, SimpleRpc) {
+  MAYBE_SKIP_TEST;
   ResetStub();
   SendRpcs(1, false);
 }
 
 TEST_P(ClientCallbackEnd2endTest, SequentialRpcs) {
+  MAYBE_SKIP_TEST;
   ResetStub();
   SendRpcs(10, false);
 }
 
+TEST_P(ClientCallbackEnd2endTest, SendClientInitialMetadata) {
+  MAYBE_SKIP_TEST;
+  ResetStub();
+  SimpleRequest request;
+  SimpleResponse response;
+  ClientContext cli_ctx;
+
+  cli_ctx.AddMetadata(kCheckClientInitialMetadataKey,
+                      kCheckClientInitialMetadataVal);
+
+  std::mutex mu;
+  std::condition_variable cv;
+  bool done = false;
+  stub_->experimental_async()->CheckClientInitialMetadata(
+      &cli_ctx, &request, &response, [&done, &mu, &cv](Status s) {
+        GPR_ASSERT(s.ok());
+
+        std::lock_guard<std::mutex> l(mu);
+        done = true;
+        cv.notify_one();
+      });
+  std::unique_lock<std::mutex> l(mu);
+  while (!done) {
+    cv.wait(l);
+  }
+}
+
+TEST_P(ClientCallbackEnd2endTest, SimpleRpcWithBinaryMetadata) {
+  MAYBE_SKIP_TEST;
+  ResetStub();
+  SendRpcs(1, true);
+}
+
 TEST_P(ClientCallbackEnd2endTest, SequentialRpcsWithVariedBinaryMetadataValue) {
+  MAYBE_SKIP_TEST;
   ResetStub();
   SendRpcs(10, true);
 }
 
 TEST_P(ClientCallbackEnd2endTest, SequentialGenericRpcs) {
+  MAYBE_SKIP_TEST;
   ResetStub();
   SendRpcsGeneric(10, false);
 }
 
+TEST_P(ClientCallbackEnd2endTest, SequentialGenericRpcsAsBidi) {
+  MAYBE_SKIP_TEST;
+  ResetStub();
+  SendGenericEchoAsBidi(10, 1);
+}
+
+TEST_P(ClientCallbackEnd2endTest, SequentialGenericRpcsAsBidiWithReactorReuse) {
+  MAYBE_SKIP_TEST;
+  ResetStub();
+  SendGenericEchoAsBidi(10, 10);
+}
+
 #if GRPC_ALLOW_EXCEPTIONS
 TEST_P(ClientCallbackEnd2endTest, ExceptingRpc) {
+  MAYBE_SKIP_TEST;
   ResetStub();
   SendRpcsGeneric(10, true);
 }
 #endif
 
 TEST_P(ClientCallbackEnd2endTest, MultipleRpcsWithVariedBinaryMetadataValue) {
+  MAYBE_SKIP_TEST;
   ResetStub();
   std::vector<std::thread> threads;
   threads.reserve(10);
@@ -231,6 +383,7 @@ TEST_P(ClientCallbackEnd2endTest, MultipleRpcsWithVariedBinaryMetadataValue) {
 }
 
 TEST_P(ClientCallbackEnd2endTest, MultipleRpcs) {
+  MAYBE_SKIP_TEST;
   ResetStub();
   std::vector<std::thread> threads;
   threads.reserve(10);
@@ -243,6 +396,7 @@ TEST_P(ClientCallbackEnd2endTest, MultipleRpcs) {
 }
 
 TEST_P(ClientCallbackEnd2endTest, CancelRpcBeforeStart) {
+  MAYBE_SKIP_TEST;
   ResetStub();
   EchoRequest request;
   EchoResponse response;
@@ -267,7 +421,163 @@ TEST_P(ClientCallbackEnd2endTest, CancelRpcBeforeStart) {
   }
 }
 
-TestScenario scenarios[] = {TestScenario{false}, TestScenario{true}};
+TEST_P(ClientCallbackEnd2endTest, RequestStream) {
+  MAYBE_SKIP_TEST;
+  ResetStub();
+  class Client : public grpc::experimental::ClientWriteReactor<EchoRequest> {
+   public:
+    explicit Client(grpc::testing::EchoTestService::Stub* stub) {
+      context_.set_initial_metadata_corked(true);
+      stub->experimental_async()->RequestStream(&context_, &response_, this);
+      StartCall();
+      request_.set_message("Hello server.");
+      StartWrite(&request_);
+    }
+    void OnWriteDone(bool ok) override {
+      writes_left_--;
+      if (writes_left_ > 1) {
+        StartWrite(&request_);
+      } else if (writes_left_ == 1) {
+        StartWriteLast(&request_, WriteOptions());
+      }
+    }
+    void OnDone(const Status& s) override {
+      EXPECT_TRUE(s.ok());
+      EXPECT_EQ(response_.message(), "Hello server.Hello server.Hello server.");
+      std::unique_lock<std::mutex> l(mu_);
+      done_ = true;
+      cv_.notify_one();
+    }
+    void Await() {
+      std::unique_lock<std::mutex> l(mu_);
+      while (!done_) {
+        cv_.wait(l);
+      }
+    }
+
+   private:
+    EchoRequest request_;
+    EchoResponse response_;
+    ClientContext context_;
+    int writes_left_{3};
+    std::mutex mu_;
+    std::condition_variable cv_;
+    bool done_ = false;
+  } test{stub_.get()};
+
+  test.Await();
+}
+
+TEST_P(ClientCallbackEnd2endTest, ResponseStream) {
+  MAYBE_SKIP_TEST;
+  ResetStub();
+  class Client : public grpc::experimental::ClientReadReactor<EchoResponse> {
+   public:
+    explicit Client(grpc::testing::EchoTestService::Stub* stub) {
+      request_.set_message("Hello client ");
+      stub->experimental_async()->ResponseStream(&context_, &request_, this);
+      StartCall();
+      StartRead(&response_);
+    }
+    void OnReadDone(bool ok) override {
+      if (!ok) {
+        EXPECT_EQ(reads_complete_, kServerDefaultResponseStreamsToSend);
+      } else {
+        EXPECT_LE(reads_complete_, kServerDefaultResponseStreamsToSend);
+        EXPECT_EQ(response_.message(),
+                  request_.message() + grpc::to_string(reads_complete_));
+        reads_complete_++;
+        StartRead(&response_);
+      }
+    }
+    void OnDone(const Status& s) override {
+      EXPECT_TRUE(s.ok());
+      std::unique_lock<std::mutex> l(mu_);
+      done_ = true;
+      cv_.notify_one();
+    }
+    void Await() {
+      std::unique_lock<std::mutex> l(mu_);
+      while (!done_) {
+        cv_.wait(l);
+      }
+    }
+
+   private:
+    EchoRequest request_;
+    EchoResponse response_;
+    ClientContext context_;
+    int reads_complete_{0};
+    std::mutex mu_;
+    std::condition_variable cv_;
+    bool done_ = false;
+  } test{stub_.get()};
+
+  test.Await();
+}
+
+TEST_P(ClientCallbackEnd2endTest, BidiStream) {
+  MAYBE_SKIP_TEST;
+  ResetStub();
+  class Client : public grpc::experimental::ClientBidiReactor<EchoRequest,
+                                                              EchoResponse> {
+   public:
+    explicit Client(grpc::testing::EchoTestService::Stub* stub) {
+      request_.set_message("Hello fren ");
+      stub->experimental_async()->BidiStream(&context_, this);
+      StartCall();
+      StartRead(&response_);
+      StartWrite(&request_);
+    }
+    void OnReadDone(bool ok) override {
+      if (!ok) {
+        EXPECT_EQ(reads_complete_, kServerDefaultResponseStreamsToSend);
+      } else {
+        EXPECT_LE(reads_complete_, kServerDefaultResponseStreamsToSend);
+        EXPECT_EQ(response_.message(), request_.message());
+        reads_complete_++;
+        StartRead(&response_);
+      }
+    }
+    void OnWriteDone(bool ok) override {
+      EXPECT_TRUE(ok);
+      if (++writes_complete_ == kServerDefaultResponseStreamsToSend) {
+        StartWritesDone();
+      } else {
+        StartWrite(&request_);
+      }
+    }
+    void OnDone(const Status& s) override {
+      EXPECT_TRUE(s.ok());
+      std::unique_lock<std::mutex> l(mu_);
+      done_ = true;
+      cv_.notify_one();
+    }
+    void Await() {
+      std::unique_lock<std::mutex> l(mu_);
+      while (!done_) {
+        cv_.wait(l);
+      }
+    }
+
+   private:
+    EchoRequest request_;
+    EchoResponse response_;
+    ClientContext context_;
+    int reads_complete_{0};
+    int writes_complete_{0};
+    std::mutex mu_;
+    std::condition_variable cv_;
+    bool done_ = false;
+  } test{stub_.get()};
+
+  test.Await();
+}
+
+TestScenario scenarios[]{{false, Protocol::INPROC},
+                         {false, Protocol::TCP},
+                         {true, Protocol::INPROC},
+                         {true, Protocol::TCP}};
 
 INSTANTIATE_TEST_CASE_P(ClientCallbackEnd2endTest, ClientCallbackEnd2endTest,
                         ::testing::ValuesIn(scenarios));
@@ -277,7 +587,7 @@ INSTANTIATE_TEST_CASE_P(ClientCallbackEnd2endTest, ClientCallbackEnd2endTest,
 }  // namespace grpc
 
 int main(int argc, char** argv) {
-  grpc_test_init(argc, argv);
+  grpc::testing::TestEnvironment env(argc, argv);
   ::testing::InitGoogleTest(&argc, argv);
   return RUN_ALL_TESTS();
 }
