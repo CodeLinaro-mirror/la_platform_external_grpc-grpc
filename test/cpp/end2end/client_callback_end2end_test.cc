@@ -169,7 +169,10 @@ class ClientCallbackEnd2endTest
 
   void TearDown() override {
     if (is_server_started_) {
-      server_->Shutdown();
+      // Although we would normally do an explicit shutdown, the server
+      // should also work correctly with just a destructor call. The regular
+      // end2end test uses explicit shutdown, so let this one just do reset.
+      server_.reset();
     }
     if (picked_port_ > 0) {
       grpc_recycle_unused_port(picked_port_);
@@ -326,8 +329,8 @@ class ClientCallbackEnd2endTest
           };
           activate_();
         }
-        void OnWriteDone(bool ok) override { StartWritesDone(); }
-        void OnReadDone(bool ok) override {
+        void OnWriteDone(bool /*ok*/) override { StartWritesDone(); }
+        void OnReadDone(bool /*ok*/) override {
           EchoResponse response;
           EXPECT_TRUE(ParseFromByteBuffer(&recv_buf_, &response));
           EXPECT_EQ(request_.message(), response.message());
@@ -1375,15 +1378,18 @@ std::vector<TestScenario> CreateTestScenarios(bool test_insecure) {
   return scenarios;
 }
 
-INSTANTIATE_TEST_CASE_P(ClientCallbackEnd2endTest, ClientCallbackEnd2endTest,
-                        ::testing::ValuesIn(CreateTestScenarios(true)));
+INSTANTIATE_TEST_SUITE_P(ClientCallbackEnd2endTest, ClientCallbackEnd2endTest,
+                         ::testing::ValuesIn(CreateTestScenarios(true)));
 
 }  // namespace
 }  // namespace testing
 }  // namespace grpc
 
 int main(int argc, char** argv) {
+  grpc_init();
   grpc::testing::TestEnvironment env(argc, argv);
   ::testing::InitGoogleTest(&argc, argv);
-  return RUN_ALL_TESTS();
+  int ret = RUN_ALL_TESTS();
+  grpc_shutdown();
+  return ret;
 }
