@@ -112,6 +112,8 @@ EXPORTS
     grpc_access_token_credentials_create
     grpc_google_iam_credentials_create
     grpc_sts_credentials_create
+    grpc_auth_metadata_context_copy
+    grpc_auth_metadata_context_reset
     grpc_metadata_credentials_create_from_plugin
     grpc_secure_channel_create
     grpc_server_credentials_release
@@ -136,6 +138,7 @@ EXPORTS
     grpc_local_server_credentials_create
     grpc_tls_credentials_options_create
     grpc_tls_credentials_options_set_cert_request_type
+    grpc_tls_credentials_options_set_server_verification_option
     grpc_tls_credentials_options_set_key_materials_config
     grpc_tls_credentials_options_set_credential_reload_config
     grpc_tls_credentials_options_set_server_authorization_check_config

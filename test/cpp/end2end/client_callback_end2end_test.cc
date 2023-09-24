@@ -299,7 +299,7 @@ class ClientCallbackEnd2endTest
     }
   }
 
-  void SendGenericEchoAsBidi(int num_rpcs, int reuses) {
+  void SendGenericEchoAsBidi(int num_rpcs, int reuses, bool do_writes_done) {
     const grpc::string kMethodName("/grpc.testing.EchoTestService/Echo");
     grpc::string test_string("");
     for (int i = 0; i < num_rpcs; i++) {
@@ -308,8 +308,8 @@ class ClientCallbackEnd2endTest
                                                                   ByteBuffer> {
        public:
         Client(ClientCallbackEnd2endTest* test, const grpc::string& method_name,
-               const grpc::string& test_str, int reuses)
-            : reuses_remaining_(reuses) {
+               const grpc::string& test_str, int reuses, bool do_writes_done)
+            : reuses_remaining_(reuses), do_writes_done_(do_writes_done) {
           activate_ = [this, test, method_name, test_str] {
             if (reuses_remaining_ > 0) {
               cli_ctx_.reset(new ClientContext);
@@ -329,7 +329,11 @@ class ClientCallbackEnd2endTest
           };
           activate_();
         }
-        void OnWriteDone(bool /*ok*/) override { StartWritesDone(); }
+        void OnWriteDone(bool /*ok*/) override {
+          if (do_writes_done_) {
+            StartWritesDone();
+          }
+        }
         void OnReadDone(bool /*ok*/) override {
           EchoResponse response;
           EXPECT_TRUE(ParseFromByteBuffer(&recv_buf_, &response));
@@ -355,7 +359,10 @@ class ClientCallbackEnd2endTest
         std::mutex mu_;
         std::condition_variable cv_;
         bool done_ = false;
-      } rpc{this, kMethodName, test_string, reuses};
+        const bool do_writes_done_;
+      };
+
+      Client rpc(this, kMethodName, test_string, reuses, do_writes_done);
 
       rpc.Await();
     }
@@ -517,13 +524,19 @@ TEST_P(ClientCallbackEnd2endTest, SequentialGenericRpcs) {
 TEST_P(ClientCallbackEnd2endTest, SequentialGenericRpcsAsBidi) {
   MAYBE_SKIP_TEST;
   ResetStub();
-  SendGenericEchoAsBidi(10, 1);
+  SendGenericEchoAsBidi(10, 1, /*do_writes_done=*/true);
 }
 
 TEST_P(ClientCallbackEnd2endTest, SequentialGenericRpcsAsBidiWithReactorReuse) {
   MAYBE_SKIP_TEST;
   ResetStub();
-  SendGenericEchoAsBidi(10, 10);
+  SendGenericEchoAsBidi(10, 10, /*do_writes_done=*/true);
+}
+
+TEST_P(ClientCallbackEnd2endTest, GenericRpcNoWritesDone) {
+  MAYBE_SKIP_TEST;
+  ResetStub();
+  SendGenericEchoAsBidi(1, 1, /*do_writes_done=*/false);
 }
 
 #if GRPC_ALLOW_EXCEPTIONS
@@ -831,6 +844,72 @@ TEST_P(ClientCallbackEnd2endTest, UnaryReactor) {
   };
 
   UnaryClient test{stub_.get()};
+  test.Await();
+  // Make sure that the server interceptors were not notified of a cancel
+  if (GetParam().use_interceptors) {
+    EXPECT_EQ(0, DummyInterceptor::GetNumTimesCancel());
+  }
+}
+
+TEST_P(ClientCallbackEnd2endTest, GenericUnaryReactor) {
+  MAYBE_SKIP_TEST;
+  ResetStub();
+  const grpc::string kMethodName("/grpc.testing.EchoTestService/Echo");
+  class UnaryClient : public grpc::experimental::ClientUnaryReactor {
+   public:
+    UnaryClient(grpc::GenericStub* stub, const grpc::string& method_name) {
+      cli_ctx_.AddMetadata("key1", "val1");
+      cli_ctx_.AddMetadata("key2", "val2");
+      request_.mutable_param()->set_echo_metadata_initially(true);
+      request_.set_message("Hello metadata");
+      send_buf_ = SerializeToByteBuffer(&request_);
+
+      stub->experimental().PrepareUnaryCall(&cli_ctx_, method_name,
+                                            send_buf_.get(), &recv_buf_, this);
+      StartCall();
+    }
+    void OnReadInitialMetadataDone(bool ok) override {
+      EXPECT_TRUE(ok);
+      EXPECT_EQ(1u, cli_ctx_.GetServerInitialMetadata().count("key1"));
+      EXPECT_EQ(
+          "val1",
+          ToString(cli_ctx_.GetServerInitialMetadata().find("key1")->second));
+      EXPECT_EQ(1u, cli_ctx_.GetServerInitialMetadata().count("key2"));
+      EXPECT_EQ(
+          "val2",
+          ToString(cli_ctx_.GetServerInitialMetadata().find("key2")->second));
+      initial_metadata_done_ = true;
+    }
+    void OnDone(const Status& s) override {
+      EXPECT_TRUE(initial_metadata_done_);
+      EXPECT_EQ(0u, cli_ctx_.GetServerTrailingMetadata().size());
+      EXPECT_TRUE(s.ok());
+      EchoResponse response;
+      EXPECT_TRUE(ParseFromByteBuffer(&recv_buf_, &response));
+      EXPECT_EQ(request_.message(), response.message());
+      std::unique_lock<std::mutex> l(mu_);
+      done_ = true;
+      cv_.notify_one();
+    }
+    void Await() {
+      std::unique_lock<std::mutex> l(mu_);
+      while (!done_) {
+        cv_.wait(l);
+      }
+    }
+
+   private:
+    EchoRequest request_;
+    std::unique_ptr<ByteBuffer> send_buf_;
+    ByteBuffer recv_buf_;
+    ClientContext cli_ctx_;
+    std::mutex mu_;
+    std::condition_variable cv_;
+    bool done_{false};
+    bool initial_metadata_done_{false};
+  };
+
+  UnaryClient test{generic_stub_.get(), kMethodName};
   test.Await();
   // Make sure that the server interceptors were not notified of a cancel
   if (GetParam().use_interceptors) {
@@ -1386,9 +1465,9 @@ INSTANTIATE_TEST_SUITE_P(ClientCallbackEnd2endTest, ClientCallbackEnd2endTest,
 }  // namespace grpc
 
 int main(int argc, char** argv) {
-  grpc_init();
-  grpc::testing::TestEnvironment env(argc, argv);
   ::testing::InitGoogleTest(&argc, argv);
+  grpc::testing::TestEnvironment env(argc, argv);
+  grpc_init();
   int ret = RUN_ALL_TESTS();
   grpc_shutdown();
   return ret;
