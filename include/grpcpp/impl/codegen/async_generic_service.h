@@ -19,6 +19,8 @@
 #ifndef GRPCPP_IMPL_CODEGEN_ASYNC_GENERIC_SERVICE_H
 #define GRPCPP_IMPL_CODEGEN_ASYNC_GENERIC_SERVICE_H
 
+#include <grpc/impl/codegen/port_platform.h>
+
 #include <grpcpp/impl/codegen/async_stream_impl.h>
 #include <grpcpp/impl/codegen/byte_buffer.h>
 #include <grpcpp/impl/codegen/server_callback_handlers.h>
@@ -38,8 +40,8 @@ typedef ::grpc_impl::ServerAsyncWriter<ByteBuffer> GenericServerAsyncWriter;
 
 class GenericServerContext final : public ::grpc_impl::ServerContext {
  public:
-  const grpc::string& method() const { return method_; }
-  const grpc::string& host() const { return host_; }
+  const std::string& method() const { return method_; }
+  const std::string& host() const { return host_; }
 
  private:
   friend class grpc_impl::Server;
@@ -51,8 +53,8 @@ class GenericServerContext final : public ::grpc_impl::ServerContext {
     ::grpc_impl::ServerContext::Clear();
   }
 
-  grpc::string method_;
-  grpc::string host_;
+  std::string method_;
+  std::string host_;
 };
 
 // A generic service at the server side accepts all RPC methods and hosts. It is
@@ -87,7 +89,9 @@ class AsyncGenericService final {
   grpc_impl::Server* server_;
 };
 
+#ifndef GRPC_CALLBACK_API_NONEXPERIMENTAL
 namespace experimental {
+#endif
 
 /// \a ServerGenericBidiReactor is the reactor class for bidi streaming RPCs
 /// invoked on a CallbackGenericService. It is just a ServerBidi reactor with
@@ -98,8 +102,8 @@ using ServerGenericBidiReactor =
 class GenericCallbackServerContext final
     : public ::grpc_impl::CallbackServerContext {
  public:
-  const grpc::string& method() const { return method_; }
-  const grpc::string& host() const { return host_; }
+  const std::string& method() const { return method_; }
+  const std::string& host() const { return host_; }
 
  private:
   friend class ::grpc_impl::Server;
@@ -111,8 +115,8 @@ class GenericCallbackServerContext final
     ::grpc_impl::CallbackServerContext::Clear();
   }
 
-  grpc::string method_;
-  grpc::string host_;
+  std::string method_;
+  std::string host_;
 };
 
 /// \a CallbackGenericService is the base class for generic services implemented
@@ -150,7 +154,10 @@ class CallbackGenericService {
 
   grpc_impl::Server* server_{nullptr};
 };
+
+#ifndef GRPC_CALLBACK_API_NONEXPERIMENTAL
 }  // namespace experimental
+#endif
 }  // namespace grpc
 
 #endif  // GRPCPP_IMPL_CODEGEN_ASYNC_GENERIC_SERVICE_H

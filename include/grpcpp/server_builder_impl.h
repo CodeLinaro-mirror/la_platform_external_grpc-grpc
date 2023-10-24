@@ -24,6 +24,8 @@
 #include <memory>
 #include <vector>
 
+#include <grpc/impl/codegen/port_platform.h>
+
 #include <grpc/compression.h>
 #include <grpc/support/cpu.h>
 #include <grpc/support/workaround_list.h>
@@ -39,7 +41,6 @@ struct grpc_resource_quota;
 namespace grpc_impl {
 
 class CompletionQueue;
-class ResourceQuota;
 class Server;
 class ServerCompletionQueue;
 class ServerCredentials;
@@ -48,6 +49,7 @@ class ServerCredentials;
 namespace grpc {
 
 class AsyncGenericService;
+class ResourceQuota;
 class Service;
 namespace testing {
 class ServerBuilderPluginTest;
@@ -57,9 +59,15 @@ namespace internal {
 class ExternalConnectionAcceptorImpl;
 }  // namespace internal
 
+#ifndef GRPC_CALLBACK_API_NONEXPERIMENTAL
 namespace experimental {
+#endif
 class CallbackGenericService;
+#ifndef GRPC_CALLBACK_API_NONEXPERIMENTAL
+}  // namespace experimental
+#endif
 
+namespace experimental {
 // EXPERIMENTAL API:
 // Interface for a grpc server to build transports with connections created out
 // of band.
@@ -99,6 +107,8 @@ class ServerBuilder {
   ///     traffic (via AddListeningPort)
   ///  3. [for async api only] completion queues have been added via
   ///     AddCompletionQueue
+  ///
+  ///  Will return a nullptr on errors.
   virtual std::unique_ptr<grpc::Server> BuildAndStart();
 
   /// Register a service. This call does not take ownership of the service.
@@ -123,7 +133,7 @@ class ServerBuilder {
   /// it is successfully bound by BuildAndStart(), 0 otherwise. AddListeningPort
   /// does not modify this pointer.
   ServerBuilder& AddListeningPort(
-      const grpc::string& addr_uri,
+      const std::string& addr_uri,
       std::shared_ptr<grpc_impl::ServerCredentials> creds,
       int* selected_port = nullptr);
 
@@ -167,7 +177,7 @@ class ServerBuilder {
   /// The service must exist for the lifetime of the \a Server instance
   /// returned by \a BuildAndStart(). Only matches requests with :authority \a
   /// host
-  ServerBuilder& RegisterService(const grpc::string& host,
+  ServerBuilder& RegisterService(const std::string& host,
                                  grpc::Service* service);
 
   /// Register a generic service.
@@ -218,8 +228,7 @@ class ServerBuilder {
       grpc_compression_algorithm algorithm);
 
   /// Set the attached buffer pool for this server
-  ServerBuilder& SetResourceQuota(
-      const grpc_impl::ResourceQuota& resource_quota);
+  ServerBuilder& SetResourceQuota(const grpc::ResourceQuota& resource_quota);
 
   ServerBuilder& SetOption(std::unique_ptr<grpc::ServerBuilderOption> option);
 
@@ -237,7 +246,7 @@ class ServerBuilder {
   /// Add a channel argument (an escape hatch to tuning core library parameters
   /// directly)
   template <class T>
-  ServerBuilder& AddChannelArgument(const grpc::string& arg, const T& value) {
+  ServerBuilder& AddChannelArgument(const std::string& arg, const T& value) {
     return SetOption(grpc::MakeChannelArgumentOption(arg, value));
   }
 
@@ -265,12 +274,14 @@ class ServerBuilder {
       builder_->interceptor_creators_ = std::move(interceptor_creators);
     }
 
+#ifndef GRPC_CALLBACK_API_NONEXPERIMENTAL
     /// Register a generic service that uses the callback API.
     /// Matches requests with any :authority
     /// This is mostly useful for writing generic gRPC Proxies where the exact
     /// serialization format is unknown
     ServerBuilder& RegisterCallbackGenericService(
         grpc::experimental::CallbackGenericService* service);
+#endif
 
     enum class ExternalConnectionType {
       FROM_FD = 0  // in the form of a file descriptor
@@ -288,6 +299,15 @@ class ServerBuilder {
     ServerBuilder* builder_;
   };
 
+#ifdef GRPC_CALLBACK_API_NONEXPERIMENTAL
+  /// Register a generic service that uses the callback API.
+  /// Matches requests with any :authority
+  /// This is mostly useful for writing generic gRPC Proxies where the exact
+  /// serialization format is unknown
+  ServerBuilder& RegisterCallbackGenericService(
+      grpc::CallbackGenericService* service);
+#endif
+
   /// NOTE: The function experimental() is not stable public API. It is a view
   /// to the experimental components of this class. It may be changed or removed
   /// at any time.
@@ -296,17 +316,17 @@ class ServerBuilder {
  protected:
   /// Experimental, to be deprecated
   struct Port {
-    grpc::string addr;
+    std::string addr;
     std::shared_ptr<grpc_impl::ServerCredentials> creds;
     int* selected_port;
   };
 
   /// Experimental, to be deprecated
-  typedef std::unique_ptr<grpc::string> HostString;
+  typedef std::unique_ptr<std::string> HostString;
   struct NamedService {
     explicit NamedService(grpc::Service* s) : service(s) {}
-    NamedService(const grpc::string& h, grpc::Service* s)
-        : host(new grpc::string(h)), service(s) {}
+    NamedService(const std::string& h, grpc::Service* s)
+        : host(new std::string(h)), service(s) {}
     HostString host;
     grpc::Service* service;
   };
@@ -369,8 +389,13 @@ class ServerBuilder {
   std::vector<std::unique_ptr<grpc::ServerBuilderPlugin>> plugins_;
   grpc_resource_quota* resource_quota_;
   grpc::AsyncGenericService* generic_service_{nullptr};
+#ifdef GRPC_CALLBACK_API_NONEXPERIMENTAL
+  grpc::CallbackGenericService* callback_generic_service_{nullptr};
+#else
   grpc::experimental::CallbackGenericService* callback_generic_service_{
       nullptr};
+#endif
+
   struct {
     bool is_set;
     grpc_compression_level level;

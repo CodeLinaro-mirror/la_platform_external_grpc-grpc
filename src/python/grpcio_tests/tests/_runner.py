@@ -15,7 +15,6 @@
 from __future__ import absolute_import
 
 import collections
-import multiprocessing
 import os
 import select
 import signal
@@ -115,6 +114,8 @@ class AugmentedCase(collections.namedtuple('AugmentedCase', ['case', 'id'])):
         return super(cls, AugmentedCase).__new__(cls, case, id)
 
 
+# NOTE(lidiz) This complex wrapper is not triggering setUpClass nor
+# tearDownClass. Do not use those methods, or fix this wrapper!
 class Runner(object):
 
     def __init__(self, dedicated_threads=False):
@@ -182,7 +183,6 @@ class Runner(object):
                 pass
 
         try_set_handler('SIGINT', sigint_handler)
-        try_set_handler('SIGSEGV', fault_handler)
         try_set_handler('SIGBUS', fault_handler)
         try_set_handler('SIGABRT', fault_handler)
         try_set_handler('SIGFPE', fault_handler)

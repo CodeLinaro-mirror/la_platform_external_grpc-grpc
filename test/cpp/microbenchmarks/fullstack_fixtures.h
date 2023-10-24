@@ -62,19 +62,10 @@ class FixtureConfiguration {
 
 class BaseFixture : public TrackCounters {};
 
-// Special tag to be used in Server shutdown. This tag is *NEVER* returned when
-// Cq->Next() API is called (This is because FinalizeResult() function in this
-// class always returns 'false'). This is intentional and makes writing shutdown
-// code easier.
-class ShutdownTag : public internal::CompletionQueueTag {
- public:
-  bool FinalizeResult(void** /*tag*/, bool* /*status*/) { return false; }
-};
-
 class FullstackFixture : public BaseFixture {
  public:
   FullstackFixture(Service* service, const FixtureConfiguration& config,
-                   const grpc::string& address) {
+                   const std::string& address) {
     ServerBuilder b;
     if (address.length() > 0) {
       b.AddListeningPort(address, InsecureServerCredentials());
@@ -94,11 +85,7 @@ class FullstackFixture : public BaseFixture {
   }
 
   virtual ~FullstackFixture() {
-    // Dummy shutdown tag (this tag is swallowed by cq->Next() and is not
-    // returned to the user) see ShutdownTag definition for more details
-    ShutdownTag shutdown_tag;
-    grpc_server_shutdown_and_notify(server_->c_server(), cq_->cq(),
-                                    &shutdown_tag);
+    server_->Shutdown();
     cq_->Shutdown();
     void* tag;
     bool ok;
@@ -133,7 +120,7 @@ class TCP : public FullstackFixture {
  private:
   int port_;
 
-  static grpc::string MakeAddress(int* port) {
+  static std::string MakeAddress(int* port) {
     *port = grpc_pick_unused_port_or_die();
     std::stringstream addr;
     addr << "localhost:" << *port;
@@ -152,7 +139,7 @@ class UDS : public FullstackFixture {
  private:
   int port_;
 
-  static grpc::string MakeAddress(int* port) {
+  static std::string MakeAddress(int* port) {
     *port = grpc_pick_unused_port_or_die();  // just for a unique id - not a
                                              // real port
     std::stringstream addr;
@@ -191,12 +178,9 @@ class EndpointPairFixture : public BaseFixture {
       server_transport_ = grpc_create_chttp2_transport(
           server_args, endpoints.server, false /* is_client */);
 
-      grpc_pollset** pollsets;
-      size_t num_pollsets = 0;
-      grpc_server_get_pollsets(server_->c_server(), &pollsets, &num_pollsets);
-
-      for (size_t i = 0; i < num_pollsets; i++) {
-        grpc_endpoint_add_to_pollset(endpoints.server, pollsets[i]);
+      for (grpc_pollset* pollset :
+           grpc_server_get_pollsets(server_->c_server())) {
+        grpc_endpoint_add_to_pollset(endpoints.server, pollset);
       }
 
       grpc_server_setup_transport(server_->c_server(), server_transport_,
@@ -226,11 +210,7 @@ class EndpointPairFixture : public BaseFixture {
   }
 
   virtual ~EndpointPairFixture() {
-    // Dummy shutdown tag (this tag is swallowed by cq->Next() and is not
-    // returned to the user) see ShutdownTag definition for more details
-    ShutdownTag shutdown_tag;
-    grpc_server_shutdown_and_notify(server_->c_server(), cq_->cq(),
-                                    &shutdown_tag);
+    server_->Shutdown();
     cq_->Shutdown();
     void* tag;
     bool ok;

@@ -135,18 +135,20 @@ grpc_cc_test(
 )
 
 grpc_cc_test(
-    name = "logical_thread_test",
-    srcs = ["logical_thread_test.cc"],
+    name = "work_serializer_test",
+    srcs = ["work_serializer_test.cc"],
     exec_properties = LARGE_MACHINE,
+    external_deps = [
+        "gtest",
+    ],
     language = "C++",
-    tags = ["no_windows"],  # LARGE_MACHINE is not configured for windows RBE
+    tags = [
+        "no_windows",  # LARGE_MACHINE is not configured for windows RBE
+    ],
     deps = [
         "//:gpr",
         "//:grpc",
         "//test/core/util:grpc_test_util",
-    ],
-    external_deps = [
-      "gtest",
     ],
 )
 
@@ -271,8 +273,8 @@ grpc_cc_test(
     srcs = ["tcp_posix_test.cc"],
     language = "C++",
     tags = [
-        "no_windows",
         "no_mac",  # TODO(jtattermusch): Reenable once https://github.com/grpc/grpc/issues/21282 is fixed.
+        "no_windows",
     ],
     deps = [
         ":endpoint_tests",
@@ -361,6 +363,27 @@ grpc_cc_test(
     deps = [
         "//:gpr",
         "//:grpc",
+        "//test/core/util:grpc_test_util",
+    ],
+)
+
+grpc_cc_test(
+    name = "stranded_event_test",
+    srcs = ["stranded_event_test.cc"],
+    external_deps = [
+        "gtest",
+    ],
+    language = "C++",
+    tags = [
+        # TODO(apolcyn): This test is failing on Windows at entry, enable once passing.
+        # See e.g. https://source.cloud.google.com/results/invocations/03e2c2bc-1742-48b4-a33d-b4cdaee5c8f9/targets
+        # E0717 23:43:56.391000000  5488 src/core/lib/surface/server.cc:1630] assertion failed: server->listeners_destroyed == server->listeners.size()
+        "no_windows",
+    ],
+    deps = [
+        "//:gpr",
+        "//:grpc",
+        "//test/core/end2end:cq_verifier",
         "//test/core/util:grpc_test_util",
     ],
 )

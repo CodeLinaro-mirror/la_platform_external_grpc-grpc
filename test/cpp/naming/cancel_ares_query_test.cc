@@ -19,6 +19,11 @@
 #include <stdio.h>
 #include <string.h>
 
+#include <string>
+
+#include "absl/strings/str_cat.h"
+#include "absl/strings/str_format.h"
+
 #include <gflags/gflags.h>
 #include <gmock/gmock.h>
 
@@ -27,7 +32,7 @@
 #include <grpc/support/alloc.h>
 #include <grpc/support/log.h>
 #include <grpc/support/time.h>
-#include "include/grpc/support/string_util.h"
+
 #include "src/core/ext/filters/client_channel/resolver.h"
 #include "src/core/ext/filters/client_channel/resolver/dns/dns_resolver_selection.h"
 #include "src/core/ext/filters/client_channel/resolver_registry.h"
@@ -36,9 +41,9 @@
 #include "src/core/lib/gpr/string.h"
 #include "src/core/lib/gprpp/orphanable.h"
 #include "src/core/lib/gprpp/thd.h"
-#include "src/core/lib/iomgr/combiner.h"
 #include "src/core/lib/iomgr/pollset.h"
 #include "src/core/lib/iomgr/pollset_set.h"
+#include "src/core/lib/iomgr/work_serializer.h"
 #include "test/core/end2end/cq_verifier.h"
 #include "test/core/util/cmdline.h"
 #include "test/core/util/port.h"
@@ -81,7 +86,7 @@ struct ArgsStruct {
   gpr_mu* mu;
   grpc_pollset* pollset;
   grpc_pollset_set* pollset_set;
-  grpc_core::Combiner* lock;
+  std::shared_ptr<grpc_core::WorkSerializer> lock;
   grpc_channel_args* channel_args;
 };
 
@@ -90,7 +95,7 @@ void ArgsInit(ArgsStruct* args) {
   grpc_pollset_init(args->pollset, &args->mu);
   args->pollset_set = grpc_pollset_set_create();
   grpc_pollset_set_add_pollset(args->pollset_set, args->pollset);
-  args->lock = grpc_combiner_create();
+  args->lock = std::make_shared<grpc_core::WorkSerializer>();
   gpr_atm_rel_store(&args->done_atm, 0);
   args->channel_args = nullptr;
 }
@@ -109,7 +114,6 @@ void ArgsFinish(ArgsStruct* args) {
   grpc_core::ExecCtx::Get()->Flush();
   grpc_pollset_destroy(args->pollset);
   gpr_free(args->pollset);
-  GRPC_COMBINER_UNREF(args->lock, nullptr);
 }
 
 void PollPollsetUntilRequestDone(ArgsStruct* args) {
@@ -155,18 +159,15 @@ class AssertFailureResultHandler : public grpc_core::Resolver::ResultHandler {
 void TestCancelActiveDNSQuery(ArgsStruct* args) {
   int fake_dns_port = grpc_pick_unused_port_or_die();
   grpc::testing::FakeNonResponsiveDNSServer fake_dns_server(fake_dns_port);
-  char* client_target;
-  GPR_ASSERT(gpr_asprintf(
-      &client_target,
+  std::string client_target = absl::StrFormat(
       "dns://[::1]:%d/dont-care-since-wont-be-resolved.test.com:1234",
-      fake_dns_port));
+      fake_dns_port);
   // create resolver and resolve
   grpc_core::OrphanablePtr<grpc_core::Resolver> resolver =
       grpc_core::ResolverRegistry::CreateResolver(
-          client_target, nullptr, args->pollset_set, args->lock,
+          client_target.c_str(), nullptr, args->pollset_set, args->lock,
           std::unique_ptr<grpc_core::Resolver::ResultHandler>(
               new AssertFailureResultHandler(args)));
-  gpr_free(client_target);
   resolver->StartLocked();
   // Without resetting and causing resolver shutdown, the
   // PollPollsetUntilRequestDone call should never finish.
@@ -279,11 +280,9 @@ void TestCancelDuringActiveQuery(
   int fake_dns_port = grpc_pick_unused_port_or_die();
   grpc::testing::FakeNonResponsiveDNSServer fake_dns_server(fake_dns_port);
   // Create a call that will try to use the fake DNS server
-  char* client_target = nullptr;
-  GPR_ASSERT(gpr_asprintf(
-      &client_target,
+  std::string client_target = absl::StrFormat(
       "dns://[::1]:%d/dont-care-since-wont-be-resolved.test.com:1234",
-      fake_dns_port));
+      fake_dns_port);
   gpr_log(GPR_DEBUG, "TestCancelActiveDNSQuery. query timeout setting: %d",
           query_timeout_setting);
   grpc_channel_args* client_args = nullptr;
@@ -310,8 +309,7 @@ void TestCancelDuringActiveQuery(
     abort();
   }
   grpc_channel* client =
-      grpc_insecure_channel_create(client_target, client_args, nullptr);
-  gpr_free(client_target);
+      grpc_insecure_channel_create(client_target.c_str(), client_args, nullptr);
   grpc_completion_queue* cq = grpc_completion_queue_create_for_next(nullptr);
   cq_verifier* cqv = cq_verifier_create(cq);
   gpr_timespec deadline = grpc_timeout_milliseconds_to_deadline(100);

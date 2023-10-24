@@ -21,6 +21,7 @@
 #include <memory>
 
 #include <grpcpp/impl/codegen/slice.h>
+#include <grpcpp/impl/grpc_library.h>
 #include <grpcpp/security/auth_metadata_processor.h>
 
 #include "src/cpp/common/secure_auth_context.h"
@@ -95,7 +96,7 @@ void AuthMetadataProcessorAyncWrapper::InvokeProcessor(
 
 namespace grpc_impl {
 
-int SecureServerCredentials::AddPortToServer(const grpc::string& addr,
+int SecureServerCredentials::AddPortToServer(const std::string& addr,
                                              grpc_server* server) {
   return grpc_server_add_secure_http2_port(server, addr.c_str(), creds_);
 }
@@ -149,9 +150,9 @@ std::shared_ptr<ServerCredentials> LocalServerCredentials(
 
 std::shared_ptr<ServerCredentials> TlsServerCredentials(
     const TlsCredentialsOptions& options) {
-  return std::shared_ptr<ServerCredentials>(
-      new SecureServerCredentials(grpc_tls_spiffe_server_credentials_create(
-          options.c_credentials_options())));
+  grpc::GrpcLibraryCodegen init;
+  return std::shared_ptr<ServerCredentials>(new SecureServerCredentials(
+      grpc_tls_server_credentials_create(options.c_credentials_options())));
 }
 
 }  // namespace experimental
