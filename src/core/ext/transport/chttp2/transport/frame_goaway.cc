@@ -36,9 +36,8 @@ void grpc_chttp2_goaway_parser_destroy(grpc_chttp2_goaway_parser* p) {
   gpr_free(p->debug_data);
 }
 
-grpc_error* grpc_chttp2_goaway_parser_begin_frame(grpc_chttp2_goaway_parser* p,
-                                                  uint32_t length,
-                                                  uint8_t /*flags*/) {
+grpc_error_handle grpc_chttp2_goaway_parser_begin_frame(
+    grpc_chttp2_goaway_parser* p, uint32_t length, uint8_t /*flags*/) {
   if (length < 8) {
     return GRPC_ERROR_CREATE_FROM_COPIED_STRING(
         absl::StrFormat("goaway frame too short (%d bytes)", length).c_str());
@@ -52,11 +51,11 @@ grpc_error* grpc_chttp2_goaway_parser_begin_frame(grpc_chttp2_goaway_parser* p,
   return GRPC_ERROR_NONE;
 }
 
-grpc_error* grpc_chttp2_goaway_parser_parse(void* parser,
-                                            grpc_chttp2_transport* t,
-                                            grpc_chttp2_stream* /*s*/,
-                                            const grpc_slice& slice,
-                                            int is_last) {
+grpc_error_handle grpc_chttp2_goaway_parser_parse(void* parser,
+                                                  grpc_chttp2_transport* t,
+                                                  grpc_chttp2_stream* /*s*/,
+                                                  const grpc_slice& slice,
+                                                  int is_last) {
   const uint8_t* const beg = GRPC_SLICE_START_PTR(slice);
   const uint8_t* const end = GRPC_SLICE_END_PTR(slice);
   const uint8_t* cur = beg;
@@ -129,9 +128,10 @@ grpc_error* grpc_chttp2_goaway_parser_parse(void* parser,
       ++cur;
     /* fallthrough */
     case GRPC_CHTTP2_GOAWAY_DEBUG:
-      if (end != cur)
+      if (end != cur) {
         memcpy(p->debug_data + p->debug_pos, cur,
                static_cast<size_t>(end - cur));
+      }
       GPR_ASSERT((size_t)(end - cur) < UINT32_MAX - p->debug_pos);
       p->debug_pos += static_cast<uint32_t>(end - cur);
       p->state = GRPC_CHTTP2_GOAWAY_DEBUG;

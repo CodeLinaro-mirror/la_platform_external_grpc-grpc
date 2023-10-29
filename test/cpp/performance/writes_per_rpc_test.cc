@@ -71,18 +71,18 @@ class EndpointPairFixture {
     /* add server endpoint to server_ */
     {
       const grpc_channel_args* server_args =
-          grpc_server_get_channel_args(server_->c_server());
+          server_->c_server()->core_server->channel_args();
       grpc_transport* transport = grpc_create_chttp2_transport(
           server_args, endpoints.server, false /* is_client */);
 
       for (grpc_pollset* pollset :
-           grpc_server_get_pollsets(server_->c_server())) {
+           server_->c_server()->core_server->pollsets()) {
         grpc_endpoint_add_to_pollset(endpoints.server, pollset);
       }
 
-      grpc_server_setup_transport(server_->c_server(), transport, nullptr,
-                                  server_args, nullptr);
-      grpc_chttp2_transport_start_reading(transport, nullptr, nullptr);
+      server_->c_server()->core_server->SetupTransport(transport, nullptr,
+                                                       server_args, nullptr);
+      grpc_chttp2_transport_start_reading(transport, nullptr, nullptr, nullptr);
     }
 
     /* create channel */
@@ -97,7 +97,7 @@ class EndpointPairFixture {
       GPR_ASSERT(transport);
       grpc_channel* channel = grpc_channel_create(
           "target", &c_args, GRPC_CLIENT_DIRECT_CHANNEL, transport);
-      grpc_chttp2_transport_start_reading(transport, nullptr, nullptr);
+      grpc_chttp2_transport_start_reading(transport, nullptr, nullptr, nullptr);
 
       channel_ = ::grpc::CreateChannelInternal(
           "", channel,
@@ -129,7 +129,7 @@ class InProcessCHTTP2 : public EndpointPairFixture {
   InProcessCHTTP2(Service* service, grpc_passthru_endpoint_stats* stats)
       : EndpointPairFixture(service, MakeEndpoints(stats)), stats_(stats) {}
 
-  virtual ~InProcessCHTTP2() {
+  ~InProcessCHTTP2() override {
     if (stats_ != nullptr) {
       grpc_passthru_endpoint_stats_destroy(stats_);
     }

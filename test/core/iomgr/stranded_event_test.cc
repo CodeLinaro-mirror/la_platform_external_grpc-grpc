@@ -40,8 +40,8 @@
 #include "absl/strings/str_format.h"
 #include "absl/types/optional.h"
 
-#include "src/core/ext/filters/client_channel/parse_address.h"
 #include "src/core/ext/filters/client_channel/resolver/fake/fake_resolver.h"
+#include "src/core/lib/address_utils/parse_address.h"
 #include "src/core/lib/gpr/useful.h"
 #include "src/core/lib/gprpp/host_port.h"
 #include "src/core/lib/gprpp/thd.h"
@@ -77,8 +77,8 @@ struct TestCall {
     grpc_completion_queue_shutdown(cq);
     while (grpc_completion_queue_next(cq, gpr_inf_future(GPR_CLOCK_REALTIME),
                                       nullptr)
-               .type != GRPC_QUEUE_SHUTDOWN)
-      ;
+               .type != GRPC_QUEUE_SHUTDOWN) {
+    }
     grpc_completion_queue_destroy(cq);
   }
 
@@ -224,14 +224,20 @@ class TestServer {
   }
 
   ~TestServer() {
-    grpc_server_shutdown_and_notify(server_, cq_, nullptr);
     thread_.join();
+    void* shutdown_and_notify_tag = this;
+    grpc_server_shutdown_and_notify(server_, cq_, shutdown_and_notify_tag);
+    grpc_event event = grpc_completion_queue_next(
+        cq_, gpr_inf_future(GPR_CLOCK_REALTIME), nullptr);
+    GPR_ASSERT(event.type == GRPC_OP_COMPLETE);
+    GPR_ASSERT(event.tag == shutdown_and_notify_tag);
+    GPR_ASSERT(event.success);
     grpc_server_destroy(server_);
     grpc_completion_queue_shutdown(cq_);
     while (grpc_completion_queue_next(cq_, gpr_inf_future(GPR_CLOCK_REALTIME),
                                       nullptr)
-               .type != GRPC_QUEUE_SHUTDOWN)
-      ;
+               .type != GRPC_QUEUE_SHUTDOWN) {
+    }
     grpc_completion_queue_destroy(cq_);
   }
 
@@ -243,7 +249,7 @@ class TestServer {
     grpc_call_details_init(&call_details);
     grpc_metadata_array request_metadata_recv;
     grpc_metadata_array_init(&request_metadata_recv);
-    void* tag = this;
+    void* tag = &call_details;
     grpc_call* call;
     grpc_call_error error = grpc_server_request_call(
         server_, &call, &call_details, &request_metadata_recv, cq_, cq_, tag);
@@ -290,15 +296,15 @@ grpc_core::Resolver::Result BuildResolverResponse(
     const std::vector<std::string>& addresses) {
   grpc_core::Resolver::Result result;
   for (const auto& address_str : addresses) {
-    grpc_uri* uri = grpc_uri_parse(address_str.c_str(), true);
-    if (uri == nullptr) {
-      gpr_log(GPR_ERROR, "Failed to parse uri:%s", address_str.c_str());
-      GPR_ASSERT(0);
+    absl::StatusOr<grpc_core::URI> uri = grpc_core::URI::Parse(address_str);
+    if (!uri.ok()) {
+      gpr_log(GPR_ERROR, "Failed to parse. Error: %s",
+              uri.status().ToString().c_str());
+      GPR_ASSERT(uri.ok());
     }
     grpc_resolved_address address;
-    GPR_ASSERT(grpc_parse_uri(uri, &address));
+    GPR_ASSERT(grpc_parse_uri(*uri, &address));
     result.addresses.emplace_back(address.addr, address.len, nullptr);
-    grpc_uri_destroy(uri);
   }
   return result;
 }
@@ -321,12 +327,22 @@ TEST(Pollers, TestReadabilityNotificationsDontGetStrandedOnOneCq) {
           kSharedUnconnectableAddress.c_str());
   std::vector<std::thread> threads;
   threads.reserve(kNumCalls);
+  std::vector<std::unique_ptr<TestServer>> test_servers;
+  // Instantiate servers inline here, so that we get port allocation out of the
+  // way and don't depend on it during the actual test. It can sometimes take
+  // time to allocate kNumCalls ports from the port server, and we don't want to
+  // hit test timeouts because of that.
+  test_servers.reserve(kNumCalls);
   for (int i = 0; i < kNumCalls; i++) {
+    test_servers.push_back(absl::make_unique<TestServer>());
+  }
+  for (int i = 0; i < kNumCalls; i++) {
+    auto test_server = test_servers[i].get();
     threads.push_back(std::thread([kSharedUnconnectableAddress,
                                    &ping_pong_round, &ping_pongs_done,
-                                   &ping_pong_round_mu, &ping_pong_round_cv]() {
-      auto test_server = absl::make_unique<TestServer>();
-      gpr_log(GPR_DEBUG, "created test_server with address:%s",
+                                   &ping_pong_round_mu, &ping_pong_round_cv,
+                                   test_server]() {
+      gpr_log(GPR_DEBUG, "using test_server with address:%s",
               test_server->address().c_str());
       std::vector<grpc_arg> args;
       grpc_arg service_config_arg;
@@ -378,8 +394,8 @@ TEST(Pollers, TestReadabilityNotificationsDontGetStrandedOnOneCq) {
       for (int i = 1; i <= kNumMessagePingPongsPerCall; i++) {
         {
           grpc_core::MutexLock lock(&ping_pong_round_mu);
-          ping_pong_round_cv.Broadcast();
-          while (ping_pong_round != i) {
+          ping_pong_round_cv.SignalAll();
+          while (int(ping_pong_round) != i) {
             ping_pong_round_cv.Wait(&ping_pong_round_mu);
           }
         }
@@ -388,7 +404,7 @@ TEST(Pollers, TestReadabilityNotificationsDontGetStrandedOnOneCq) {
         {
           grpc_core::MutexLock lock(&ping_pong_round_mu);
           ping_pongs_done++;
-          ping_pong_round_cv.Broadcast();
+          ping_pong_round_cv.SignalAll();
         }
       }
       gpr_log(GPR_DEBUG, "now receive status on call with server address:%s",
@@ -409,7 +425,7 @@ TEST(Pollers, TestReadabilityNotificationsDontGetStrandedOnOneCq) {
         ping_pong_round_cv.Wait(&ping_pong_round_mu);
       }
       ping_pong_round++;
-      ping_pong_round_cv.Broadcast();
+      ping_pong_round_cv.SignalAll();
       gpr_log(GPR_DEBUG, "initiate ping pong round: %ld", ping_pong_round);
     }
   }

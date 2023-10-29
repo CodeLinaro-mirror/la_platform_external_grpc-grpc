@@ -202,8 +202,15 @@ typedef struct {
 #define GRPC_ARG_HTTP2_MAX_FRAME_SIZE "grpc.http2.max_frame_size"
 /** Should BDP probing be performed? */
 #define GRPC_ARG_HTTP2_BDP_PROBE "grpc.http2.bdp_probe"
-/** Minimum time between sending successive ping frames without receiving any
-    data/header frame, Int valued, milliseconds. */
+/** (DEPRECATED) Does not have any effect.
+    Earlier, this arg configured the minimum time between successive ping frames
+    without receiving any data/header frame, Int valued, milliseconds. This put
+    unnecessary constraints on the configuration of keepalive pings,
+    requiring users to set this channel arg along with
+    GRPC_ARG_KEEPALIVE_TIME_MS. This arg also limited the activity of the other
+    source of pings in gRPC Core - BDP pings, but BDP pings are only sent when
+    there is receive-side data activity, making this arg unuseful for BDP pings
+    too.  */
 #define GRPC_ARG_HTTP2_MIN_SENT_PING_INTERVAL_WITHOUT_DATA_MS \
   "grpc.http2.min_time_between_pings_ms"
 /** Minimum allowed time between a server receiving successive ping frames
@@ -346,6 +353,17 @@ typedef struct {
 /* Timeout in milliseconds to use for calls to the grpclb load balancer.
    If 0 or unset, the balancer calls will have no deadline. */
 #define GRPC_ARG_GRPCLB_CALL_TIMEOUT_MS "grpc.grpclb_call_timeout_ms"
+/* Specifies the xDS bootstrap config as a JSON string.
+   FOR TESTING PURPOSES ONLY -- DO NOT USE IN PRODUCTION.
+   This option allows controlling the bootstrap configuration on a
+   per-channel basis, which is useful in tests.  However, this results
+   in having a separate xDS client instance per channel rather than
+   using the global instance, which is not the intended way to use xDS.
+   Currently, this will (a) add unnecessary load on the xDS server and
+   (b) break use of CSDS, and there may be additional side effects in
+   the future. */
+#define GRPC_ARG_TEST_ONLY_DO_NOT_USE_IN_PROD_XDS_BOOTSTRAP_CONFIG \
+  "grpc.TEST_ONLY_DO_NOT_USE_IN_PROD.xds_bootstrap_config"
 /* Timeout in milliseconds to wait for the serverlist from the grpclb load
    balancer before using fallback backend addresses from the resolver.
    If 0, enter fallback mode immediately. Default value is 10000. */
@@ -355,11 +373,6 @@ typedef struct {
    over to the next priority. Default value is 10 seconds. */
 #define GRPC_ARG_PRIORITY_FAILOVER_TIMEOUT_MS \
   "grpc.priority_failover_timeout_ms"
-/* Timeout in milliseconds to wait for a resource to be returned from
- * the xds server before assuming that it does not exist.
- * The default is 15 seconds. */
-#define GRPC_ARG_XDS_RESOURCE_DOES_NOT_EXIST_TIMEOUT_MS \
-  "grpc.xds_resource_does_not_exist_timeout_ms"
 /** If non-zero, grpc server's cronet compression workaround will be enabled */
 #define GRPC_ARG_WORKAROUND_CRONET_COMPRESSION \
   "grpc.workaround.cronet_compression"
@@ -415,6 +428,10 @@ typedef struct {
 #define GRPC_ARG_CHANNEL_POOL_DOMAIN "grpc.channel_pooling_domain"
 /** gRPC Objective-C channel pooling id. */
 #define GRPC_ARG_CHANNEL_ID "grpc.channel_id"
+/** Channel argument for grpc_authorization_policy_provider. If present, enables
+    gRPC authorization check. */
+#define GRPC_ARG_AUTHORIZATION_POLICY_PROVIDER \
+  "grpc.authorization_policy_provider"
 /** \} */
 
 /** Result of a grpc call. If the caller satisfies the prerequisites of a
@@ -460,7 +477,7 @@ typedef enum grpc_call_error {
 
 /** Default send/receive message size limits in bytes. -1 for unlimited. */
 /** TODO(roth) Make this match the default receive limit after next release */
-#define GRPC_DEFAULT_MAX_SEND_MESSAGE_LENGTH -1
+#define GRPC_DEFAULT_MAX_SEND_MESSAGE_LENGTH (-1)
 #define GRPC_DEFAULT_MAX_RECV_MESSAGE_LENGTH (4 * 1024 * 1024)
 
 /** Write Flags: */
@@ -729,21 +746,20 @@ typedef enum {
   /** Events are popped out by calling grpc_completion_queue_pluck() API ONLY*/
   GRPC_CQ_PLUCK,
 
-  /** EXPERIMENTAL: Events trigger a callback specified as the tag */
+  /** Events trigger a callback specified as the tag */
   GRPC_CQ_CALLBACK
 } grpc_cq_completion_type;
 
-/** EXPERIMENTAL: Specifies an interface class to be used as a tag
-    for callback-based completion queues. This can be used directly,
-    as the first element of a struct in C, or as a base class in C++.
-    Its "run" value should be assigned to some non-member function, such as
-    a static method. */
-typedef struct grpc_experimental_completion_queue_functor {
+/** Specifies an interface class to be used as a tag for callback-based
+ * completion queues. This can be used directly, as the first element of a
+ * struct in C, or as a base class in C++. Its "run" value should be assigned to
+ * some non-member function, such as a static method. */
+typedef struct grpc_completion_queue_functor {
   /** The run member specifies a function that will be called when this
       tag is extracted from the completion queue. Its arguments will be a
       pointer to this functor and a boolean that indicates whether the
       operation succeeded (non-zero) or failed (zero) */
-  void (*functor_run)(struct grpc_experimental_completion_queue_functor*, int);
+  void (*functor_run)(struct grpc_completion_queue_functor*, int);
 
   /** The inlineable member specifies whether this functor can be run inline.
       This should only be used for trivial internally-defined functors. */
@@ -751,10 +767,11 @@ typedef struct grpc_experimental_completion_queue_functor {
 
   /** The following fields are not API. They are meant for internal use. */
   int internal_success;
-  struct grpc_experimental_completion_queue_functor* internal_next;
-} grpc_experimental_completion_queue_functor;
+  struct grpc_completion_queue_functor* internal_next;
+} grpc_completion_queue_functor;
 
-/* The upgrade to version 2 is currently experimental. */
+typedef grpc_completion_queue_functor
+    grpc_experimental_completion_queue_functor;
 
 #define GRPC_CQ_CURRENT_VERSION 2
 #define GRPC_CQ_VERSION_MINIMUM_FOR_CALLBACKABLE 2
@@ -769,10 +786,10 @@ typedef struct grpc_completion_queue_attributes {
 
   /* END OF VERSION 1 CQ ATTRIBUTES */
 
-  /* EXPERIMENTAL: START OF VERSION 2 CQ ATTRIBUTES */
+  /* START OF VERSION 2 CQ ATTRIBUTES */
   /** When creating a callbackable CQ, pass in a functor to get invoked when
    * shutdown is complete */
-  grpc_experimental_completion_queue_functor* cq_shutdown_cb;
+  grpc_completion_queue_functor* cq_shutdown_cb;
 
   /* END OF VERSION 2 CQ ATTRIBUTES */
 } grpc_completion_queue_attributes;

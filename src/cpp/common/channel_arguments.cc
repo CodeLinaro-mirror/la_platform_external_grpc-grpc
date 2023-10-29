@@ -27,7 +27,7 @@
 #include "src/core/lib/iomgr/exec_ctx.h"
 #include "src/core/lib/iomgr/socket_mutator.h"
 
-namespace grpc_impl {
+namespace grpc {
 
 ChannelArguments::ChannelArguments() {
   // This will be ignored if used on the server side.
@@ -66,9 +66,9 @@ ChannelArguments::ChannelArguments(const ChannelArguments& other)
 }
 
 ChannelArguments::~ChannelArguments() {
-  grpc_core::ExecCtx exec_ctx;
   for (auto& arg : args_) {
     if (arg.type == GRPC_ARG_POINTER) {
+      grpc_core::ExecCtx exec_ctx;
       arg.value.pointer.vtable->destroy(arg.value.pointer.p);
     }
   }
@@ -214,4 +214,4 @@ void ChannelArguments::SetChannelArgs(grpc_channel_args* channel_args) const {
   }
 }
 
-}  // namespace grpc_impl
+}  // namespace grpc
