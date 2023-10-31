@@ -24,12 +24,12 @@
 #include <functional>
 #include <iterator>
 
+#include "absl/status/status.h"
 #include "absl/strings/string_view.h"
 
 #include "src/core/ext/filters/client_channel/server_address.h"
 #include "src/core/ext/filters/client_channel/service_config.h"
 #include "src/core/ext/filters/client_channel/subchannel_interface.h"
-#include "src/core/lib/gprpp/map.h"
 #include "src/core/lib/gprpp/orphanable.h"
 #include "src/core/lib/gprpp/ref_counted_ptr.h"
 #include "src/core/lib/iomgr/polling_entity.h"
@@ -94,11 +94,11 @@ class LoadBalancingPolicy : public InternallyRefCounted<LoadBalancingPolicy> {
     /// Application-specific requests cost metrics.  Metric names are
     /// determined by the application.  Each value is an absolute cost
     /// (e.g. 3487 bytes of storage) associated with the request.
-    std::map<absl::string_view, double, StringLess> request_cost;
+    std::map<absl::string_view, double> request_cost;
     /// Application-specific resource utilization metrics.  Metric names
     /// are determined by the application.  Each value is expressed as a
     /// fraction of total resources available.
-    std::map<absl::string_view, double, StringLess> utilization;
+    std::map<absl::string_view, double> utilization;
   };
 
   /// Interface for accessing per-call state.
@@ -230,7 +230,7 @@ class LoadBalancingPolicy : public InternallyRefCounted<LoadBalancingPolicy> {
     /// Error to be set when returning a failure.
     // TODO(roth): Replace this with something similar to grpc::Status,
     // so that we don't expose grpc_error to this API.
-    grpc_error* error = GRPC_ERROR_NONE;
+    grpc_error_handle error = GRPC_ERROR_NONE;
 
     /// Used only if type is PICK_COMPLETE.
     /// Callback set by LB policy to be notified of trailing metadata.
@@ -243,7 +243,7 @@ class LoadBalancingPolicy : public InternallyRefCounted<LoadBalancingPolicy> {
     // TODO(roth): The arguments to this callback should be moved into a
     // struct, so that we can later add new fields without breaking
     // existing implementations.
-    std::function<void(grpc_error*, MetadataInterface*, CallState*)>
+    std::function<void(grpc_error_handle, MetadataInterface*, CallState*)>
         recv_trailing_metadata_ready;
   };
 
@@ -278,11 +278,12 @@ class LoadBalancingPolicy : public InternallyRefCounted<LoadBalancingPolicy> {
 
     /// Creates a new subchannel with the specified channel args.
     virtual RefCountedPtr<SubchannelInterface> CreateSubchannel(
-        const grpc_channel_args& args) = 0;
+        ServerAddress address, const grpc_channel_args& args) = 0;
 
     /// Sets the connectivity state and returns a new picker to be used
     /// by the client channel.
     virtual void UpdateState(grpc_connectivity_state state,
+                             const absl::Status& status,
                              std::unique_ptr<SubchannelPicker>) = 0;
 
     /// Requests that the resolver re-resolve.
@@ -299,7 +300,7 @@ class LoadBalancingPolicy : public InternallyRefCounted<LoadBalancingPolicy> {
   /// return the parameters they need.
   class Config : public RefCounted<Config> {
    public:
-    virtual ~Config() = default;
+    ~Config() override = default;
 
     // Returns the load balancing policy name
     virtual const char* name() const = 0;
@@ -339,7 +340,7 @@ class LoadBalancingPolicy : public InternallyRefCounted<LoadBalancingPolicy> {
   };
 
   explicit LoadBalancingPolicy(Args args, intptr_t initial_refcount = 1);
-  virtual ~LoadBalancingPolicy();
+  ~LoadBalancingPolicy() override;
 
   // Not copyable nor movable.
   LoadBalancingPolicy(const LoadBalancingPolicy&) = delete;
@@ -374,7 +375,7 @@ class LoadBalancingPolicy : public InternallyRefCounted<LoadBalancingPolicy> {
     explicit QueuePicker(RefCountedPtr<LoadBalancingPolicy> parent)
         : parent_(std::move(parent)) {}
 
-    ~QueuePicker() { parent_.reset(DEBUG_LOCATION, "QueuePicker"); }
+    ~QueuePicker() override { parent_.reset(DEBUG_LOCATION, "QueuePicker"); }
 
     PickResult Pick(PickArgs args) override;
 
@@ -386,13 +387,13 @@ class LoadBalancingPolicy : public InternallyRefCounted<LoadBalancingPolicy> {
   // A picker that returns PICK_TRANSIENT_FAILURE for all picks.
   class TransientFailurePicker : public SubchannelPicker {
    public:
-    explicit TransientFailurePicker(grpc_error* error) : error_(error) {}
+    explicit TransientFailurePicker(grpc_error_handle error) : error_(error) {}
     ~TransientFailurePicker() override { GRPC_ERROR_UNREF(error_); }
 
     PickResult Pick(PickArgs args) override;
 
    private:
-    grpc_error* error_;
+    grpc_error_handle error_;
   };
 
  protected:
