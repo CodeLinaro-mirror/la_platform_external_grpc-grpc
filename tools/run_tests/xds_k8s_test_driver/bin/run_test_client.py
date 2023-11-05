@@ -35,6 +35,10 @@ _QPS = flags.DEFINE_integer('qps', default=25, help='Queries per second')
 _PRINT_RESPONSE = flags.DEFINE_bool("print_response",
                                     default=False,
                                     help="Client prints responses")
+_CONFIG_MESH = flags.DEFINE_bool(
+    "config_mesh",
+    default=None,
+    help="Optional. Supplied to bootstrap generator to indicate AppNet mesh.")
 _REUSE_NAMESPACE = flags.DEFINE_bool("reuse_namespace",
                                      default=True,
                                      help="Use existing namespace if exists")
@@ -44,20 +48,22 @@ _CLEANUP_NAMESPACE = flags.DEFINE_bool(
     help="Delete namespace during resource cleanup")
 flags.adopt_module_key_flags(xds_flags)
 flags.adopt_module_key_flags(xds_k8s_flags)
+# Running outside of a test suite, so require explicit resource_suffix.
+flags.mark_flag_as_required("resource_suffix")
+
+# Type aliases
+KubernetesClientRunner = client_app.KubernetesClientRunner
 
 
 def main(argv):
     if len(argv) > 1:
         raise app.UsageError('Too many command-line arguments.')
 
-    # Flag shortcuts.
     project: str = xds_flags.PROJECT.value
     # GCP Service Account email
     gcp_service_account: str = xds_k8s_flags.GCP_SERVICE_ACCOUNT.value
-    # Base namespace
-    namespace = xds_flags.NAMESPACE.value
-    client_namespace = namespace
 
+    # KubernetesClientRunner arguments.
     runner_kwargs = dict(
         deployment_name=xds_flags.CLIENT_NAME.value,
         image_name=xds_k8s_flags.CLIENT_IMAGE.value,
@@ -75,7 +81,9 @@ def main(argv):
             deployment_template='client-secure.deployment.yaml')
 
     k8s_api_manager = k8s.KubernetesApiManager(xds_k8s_flags.KUBE_CONTEXT.value)
-    client_runner = client_app.KubernetesClientRunner(
+    client_namespace = KubernetesClientRunner.make_namespace_name(
+        xds_flags.RESOURCE_PREFIX.value, xds_flags.RESOURCE_SUFFIX.value)
+    client_runner = KubernetesClientRunner(
         k8s.KubernetesNamespace(k8s_api_manager, client_namespace),
         **runner_kwargs)
 
@@ -89,7 +97,8 @@ def main(argv):
             server_target=f'xds:///{server_xds_host}:{server_xds_port}',
             qps=_QPS.value,
             print_response=_PRINT_RESPONSE.value,
-            secure_mode=_SECURE.value)
+            secure_mode=_SECURE.value,
+            config_mesh=_CONFIG_MESH.value)
 
     elif _CMD.value == 'cleanup':
         logger.info('Cleanup client')

@@ -16,8 +16,6 @@
  *
  */
 
-#include "test/core/end2end/end2end_tests.h"
-
 #include <limits.h>
 #include <string.h>
 
@@ -27,13 +25,14 @@
 
 #include "src/core/lib/gpr/useful.h"
 #include "test/core/end2end/cq_verifier.h"
+#include "test/core/end2end/end2end_tests.h"
 
 #define MAX_CONNECTION_AGE_MS 500
 #define MAX_CONNECTION_AGE_GRACE_MS 1000
 #define MAX_CONNECTION_IDLE_MS 9999
 
 #define MAX_CONNECTION_AGE_JITTER_MULTIPLIER 1.1
-#define CALL_DEADLINE_S 10
+#define CALL_DEADLINE_S 30
 /* The amount of time we wait for the connection to time out, but after it the
    connection should not use up its grace period. It should be a number between
    MAX_CONNECTION_AGE_MS and MAX_CONNECTION_AGE_MS +
@@ -74,7 +73,6 @@ static void end_test(grpc_end2end_test_fixture* f) {
   grpc_completion_queue_shutdown(f->cq);
   drain_cq(f->cq);
   grpc_completion_queue_destroy(f->cq);
-  grpc_completion_queue_destroy(f->shutdown_cq);
 }
 
 static void test_max_age_forcibly_close(grpc_end2end_test_config config) {

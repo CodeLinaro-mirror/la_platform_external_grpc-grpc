@@ -16,8 +16,6 @@
  *
  */
 
-#include "test/core/end2end/end2end_tests.h"
-
 #include <stdio.h>
 #include <string.h>
 
@@ -25,7 +23,10 @@
 #include <grpc/support/alloc.h>
 #include <grpc/support/log.h>
 #include <grpc/support/time.h>
+
+#include "src/core/lib/config/core_configuration.h"
 #include "test/core/end2end/cq_verifier.h"
+#include "test/core/end2end/end2end_tests.h"
 
 static void* tag(intptr_t t) { return reinterpret_cast<void*>(t); }
 
@@ -35,9 +36,21 @@ static grpc_end2end_test_fixture begin_test(grpc_end2end_test_config config,
                                             grpc_channel_args* server_args) {
   grpc_end2end_test_fixture f;
   gpr_log(GPR_INFO, "Running test: %s/%s", test_name, config.name);
+  client_args =
+      const_cast<grpc_channel_args*>(grpc_core::CoreConfiguration::Get()
+                                         .channel_args_preconditioning()
+                                         .PreconditionChannelArgs(client_args)
+                                         .ToC());
+  server_args =
+      const_cast<grpc_channel_args*>(grpc_core::CoreConfiguration::Get()
+                                         .channel_args_preconditioning()
+                                         .PreconditionChannelArgs(server_args)
+                                         .ToC());
   f = config.create_fixture(client_args, server_args);
   config.init_server(&f, server_args);
   config.init_client(&f, client_args);
+  grpc_channel_args_destroy(client_args);
+  grpc_channel_args_destroy(server_args);
   return f;
 }
 
@@ -58,11 +71,12 @@ static void drain_cq(grpc_completion_queue* cq) {
 
 static void shutdown_server(grpc_end2end_test_fixture* f) {
   if (!f->server) return;
-  grpc_server_shutdown_and_notify(f->server, f->shutdown_cq, tag(1000));
-  GPR_ASSERT(grpc_completion_queue_pluck(f->shutdown_cq, tag(1000),
-                                         grpc_timeout_seconds_to_deadline(5),
-                                         nullptr)
-                 .type == GRPC_OP_COMPLETE);
+  grpc_server_shutdown_and_notify(f->server, f->cq, tag(1000));
+  grpc_event ev;
+  do {
+    ev = grpc_completion_queue_next(f->cq, grpc_timeout_seconds_to_deadline(5),
+                                    nullptr);
+  } while (ev.type != GRPC_OP_COMPLETE || ev.tag != tag(1000));
   grpc_server_destroy(f->server);
   f->server = nullptr;
 }
@@ -80,7 +94,6 @@ static void end_test(grpc_end2end_test_fixture* f) {
   grpc_completion_queue_shutdown(f->cq);
   drain_cq(f->cq);
   grpc_completion_queue_destroy(f->cq);
-  grpc_completion_queue_destroy(f->shutdown_cq);
 }
 
 /* Request/response with metadata and payload.*/
@@ -100,23 +113,19 @@ static void test_request_response_with_metadata_and_payload(
       {grpc_slice_from_static_string("key1-bin"),
        grpc_slice_from_static_string(
            "\xc0\xc1\xc2\xc3\xc4\xc5\xc6\xc7\xc8\xc9\xca\xcb\xcc"),
-       0,
        {{nullptr, nullptr, nullptr, nullptr}}},
       {grpc_slice_from_static_string("key2-bin"),
        grpc_slice_from_static_string(
            "\x10\x11\x12\x13\x14\x15\x16\x17\x18\x19\x1a\x1b\x1c\x1d"),
-       0,
        {{nullptr, nullptr, nullptr, nullptr}}}};
   grpc_metadata meta_s[2] = {
       {grpc_slice_from_static_string("key3-bin"),
        grpc_slice_from_static_string(
            "\xe0\xe1\xe2\xe3\xe4\xe5\xe6\xe7\xe8\xe9\xea\xeb\xec\xed\xee"),
-       0,
        {{nullptr, nullptr, nullptr, nullptr}}},
       {grpc_slice_from_static_string("key4-bin"),
        grpc_slice_from_static_string(
            "\xf0\xf1\xf2\xf3\xf4\xf5\xf6\xf7\xf8\xf9\xfa\xfb\xfc\xfd\xfe\xff"),
-       0,
        {{nullptr, nullptr, nullptr, nullptr}}}};
   grpc_end2end_test_fixture f =
       begin_test(config, "test_request_response_with_metadata_and_payload",

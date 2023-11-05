@@ -13,37 +13,54 @@
 // limitations under the License.
 #include <grpc/support/port_platform.h>
 
-#include <grpc/event_engine/endpoint_config.h>
+#include <atomic>
+#include <functional>
+#include <memory>
+#include <utility>
+
 #include <grpc/event_engine/event_engine.h>
-#include <grpc/event_engine/port.h>
-#include <grpc/impl/codegen/grpc_types.h>
-#include <grpc/support/log.h>
 
-#include "absl/strings/str_format.h"
-#include "absl/strings/str_join.h"
-
-#include "src/core/lib/event_engine/sockaddr.h"
+#include "src/core/lib/event_engine/event_engine_factory.h"
 
 namespace grpc_event_engine {
 namespace experimental {
 
-EventEngine::ResolvedAddress::ResolvedAddress(const sockaddr* address,
-                                              socklen_t size)
-    : size_(size) {
-  GPR_ASSERT(size <= sizeof(address_));
-  memcpy(&address_, address, size);
+namespace {
+std::atomic<const std::function<std::unique_ptr<EventEngine>()>*>
+    g_event_engine_factory{nullptr};
+std::atomic<EventEngine*> g_event_engine{nullptr};
+}  // namespace
+
+void SetDefaultEventEngineFactory(
+    std::function<std::unique_ptr<EventEngine>()> factory) {
+  delete g_event_engine_factory.exchange(
+      new std::function<std::unique_ptr<EventEngine>()>(std::move(factory)));
 }
 
-const struct sockaddr* EventEngine::ResolvedAddress::address() const {
-  return reinterpret_cast<const struct sockaddr*>(address_);
+std::unique_ptr<EventEngine> CreateEventEngine() {
+  if (auto* factory = g_event_engine_factory.load()) {
+    return (*factory)();
+  }
+  return DefaultEventEngineFactory();
 }
 
-socklen_t EventEngine::ResolvedAddress::size() const { return size_; }
+EventEngine* GetDefaultEventEngine() {
+  EventEngine* engine = g_event_engine.load(std::memory_order_acquire);
+  if (engine == nullptr) {
+    auto* created = CreateEventEngine().release();
+    if (g_event_engine.compare_exchange_strong(engine, created,
+                                               std::memory_order_acq_rel,
+                                               std::memory_order_acquire)) {
+      engine = created;
+    } else {
+      delete created;
+    }
+  }
+  return engine;
+}
 
-std::shared_ptr<grpc_event_engine::experimental::EventEngine>
-DefaultEventEngineFactory() {
-  // TODO(nnoble): delete when uv-ee is merged
-  abort();
+void ResetDefaultEventEngine() {
+  delete g_event_engine.exchange(nullptr, std::memory_order_acq_rel);
 }
 
 }  // namespace experimental

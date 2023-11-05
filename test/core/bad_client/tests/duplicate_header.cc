@@ -16,13 +16,12 @@
  *
  */
 
-#include "test/core/bad_client/bad_client.h"
-
 #include <string.h>
 
 #include <grpc/grpc.h>
 
 #include "src/core/lib/surface/server.h"
+#include "test/core/bad_client/bad_client.h"
 #include "test/core/end2end/cq_verifier.h"
 
 #define PFX_STR                      \
@@ -91,7 +90,7 @@ static void verifier(grpc_server* server, grpc_completion_queue* cq,
                                 nullptr);
   GPR_ASSERT(GRPC_CALL_OK == error);
 
-  CQ_EXPECT_COMPLETION(cqv, tag(102), 1);
+  CQ_EXPECT_COMPLETION_ANY_STATUS(cqv, tag(102));
   cq_verify(cqv);
 
   memset(ops, 0, sizeof(ops));
@@ -122,7 +121,7 @@ static void verifier(grpc_server* server, grpc_completion_queue* cq,
 }
 
 int main(int argc, char** argv) {
-  grpc::testing::TestEnvironment env(argc, argv);
+  grpc::testing::TestEnvironment env(&argc, argv);
   grpc_init();
 
   /* Verify that sending multiple headers doesn't segfault */

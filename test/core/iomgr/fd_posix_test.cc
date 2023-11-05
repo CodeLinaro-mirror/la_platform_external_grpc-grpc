@@ -21,8 +21,6 @@
 // This test won't work except with posix sockets enabled
 #ifdef GRPC_POSIX_SOCKET_EV
 
-#include "src/core/lib/iomgr/ev_posix.h"
-
 #include <ctype.h>
 #include <errno.h>
 #include <fcntl.h>
@@ -131,7 +129,7 @@ static void session_read_cb(void* arg, /*session */
   ssize_t read_once = 0;
   ssize_t read_total = 0;
 
-  if (error != GRPC_ERROR_NONE) {
+  if (!GRPC_ERROR_IS_NONE(error)) {
     session_shutdown_cb(arg, true);
     return;
   }
@@ -191,7 +189,7 @@ static void listen_cb(void* arg, /*=sv_arg*/
   socklen_t slen = sizeof(ss);
   grpc_fd* listen_em_fd = sv->em_fd;
 
-  if (error != GRPC_ERROR_NONE) {
+  if (!GRPC_ERROR_IS_NONE(error)) {
     listen_shutdown_cb(arg, 1);
     return;
   }
@@ -250,8 +248,8 @@ static void server_wait_and_shutdown(server* sv) {
     grpc_core::ExecCtx exec_ctx;
     grpc_pollset_worker* worker = nullptr;
     GPR_ASSERT(GRPC_LOG_IF_ERROR(
-        "pollset_work",
-        grpc_pollset_work(g_pollset, &worker, GRPC_MILLIS_INF_FUTURE)));
+        "pollset_work", grpc_pollset_work(g_pollset, &worker,
+                                          grpc_core::Timestamp::InfFuture())));
     gpr_mu_unlock(g_mu);
 
     gpr_mu_lock(g_mu);
@@ -302,7 +300,7 @@ static void client_session_write(void* arg, /*client */
   int fd = grpc_fd_wrapped_fd(cl->em_fd);
   ssize_t write_once = 0;
 
-  if (error != GRPC_ERROR_NONE) {
+  if (!GRPC_ERROR_IS_NONE(error)) {
     gpr_mu_lock(g_mu);
     client_session_shutdown_cb(arg, 1);
     gpr_mu_unlock(g_mu);
@@ -366,8 +364,8 @@ static void client_wait_and_shutdown(client* cl) {
     grpc_pollset_worker* worker = nullptr;
     grpc_core::ExecCtx exec_ctx;
     GPR_ASSERT(GRPC_LOG_IF_ERROR(
-        "pollset_work",
-        grpc_pollset_work(g_pollset, &worker, GRPC_MILLIS_INF_FUTURE)));
+        "pollset_work", grpc_pollset_work(g_pollset, &worker,
+                                          grpc_core::Timestamp::InfFuture())));
     gpr_mu_unlock(g_mu);
 
     gpr_mu_lock(g_mu);
@@ -468,8 +466,8 @@ static void test_grpc_fd_change(void) {
   while (a.cb_that_ran == nullptr) {
     grpc_pollset_worker* worker = nullptr;
     GPR_ASSERT(GRPC_LOG_IF_ERROR(
-        "pollset_work",
-        grpc_pollset_work(g_pollset, &worker, GRPC_MILLIS_INF_FUTURE)));
+        "pollset_work", grpc_pollset_work(g_pollset, &worker,
+                                          grpc_core::Timestamp::InfFuture())));
     gpr_mu_unlock(g_mu);
 
     gpr_mu_lock(g_mu);
@@ -492,8 +490,8 @@ static void test_grpc_fd_change(void) {
   while (b.cb_that_ran == nullptr) {
     grpc_pollset_worker* worker = nullptr;
     GPR_ASSERT(GRPC_LOG_IF_ERROR(
-        "pollset_work",
-        grpc_pollset_work(g_pollset, &worker, GRPC_MILLIS_INF_FUTURE)));
+        "pollset_work", grpc_pollset_work(g_pollset, &worker,
+                                          grpc_core::Timestamp::InfFuture())));
     gpr_mu_unlock(g_mu);
 
     gpr_mu_lock(g_mu);
@@ -515,7 +513,7 @@ static void destroy_pollset(void* p, grpc_error_handle /*error*/) {
 
 int main(int argc, char** argv) {
   grpc_closure destroyed;
-  grpc::testing::TestEnvironment env(argc, argv);
+  grpc::testing::TestEnvironment env(&argc, argv);
   grpc_init();
   {
     grpc_core::ExecCtx exec_ctx;
