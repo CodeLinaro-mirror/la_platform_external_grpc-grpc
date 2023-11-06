@@ -8,9 +8,9 @@ changes to this codebase at the moment.
 
 ### Stabilization roadmap 
 - [ ] Replace retrying with tenacity
-- [ ] Generate namespace for each test to prevent resource name conflicts and
+- [x] Generate namespace for each test to prevent resource name conflicts and
       allow running tests in parallel
-- [ ] Security: run server and client in separate namespaces
+- [x] Security: run server and client in separate namespaces
 - [ ] Make framework.infrastructure.gcp resources [first-class
       citizen](https://en.wikipedia.org/wiki/First-class_citizen), support
       simpler CRUD
@@ -26,13 +26,27 @@ changes to this codebase at the moment.
 #### Requirements
 1. Python v3.6+
 2. [Google Cloud SDK](https://cloud.google.com/sdk/docs/install)
-3. Configured GKE cluster
+3. `kubectl`
+
+`kubectl` can be installed via `gcloud components install kubectl`, or system package manager: https://kubernetes.io/docs/tasks/tools/#kubectl
+
+##### Getting Started
+
+1. If you haven't, [initialize](https://cloud.google.com/sdk/docs/install-sdk) gcloud SDK
+2. Activate gcloud [configuration](https://cloud.google.com/sdk/docs/configurations) with your project 
+3. Enable gcloud services:
+   ```shell
+   gcloud services enable \
+     compute.googleapis.com \
+     container.googleapis.com \
+     networksecurity.googleapis.com \
+     networkservices.googleapis.com \
+     secretmanager.googleapis.com \
+     trafficdirector.googleapis.com
+   ```
 
 #### Configure GKE cluster
-This is an example outlining minimal requirements to run `tests.baseline_test`.  
-For more details, and for the setup for security tests, see
-["Setting up Traffic Director service security with proxyless gRPC"](https://cloud.google.com/traffic-director/docs/security-proxyless-setup)
- user guide.
+This is an example outlining minimal requirements to run the [baseline tests](xds-baseline-tests).
  
 Update gloud sdk:
 ```shell
@@ -62,13 +76,18 @@ export WORKLOAD_SA_EMAIL="${WORKLOAD_SA_NAME}@${PROJECT_ID}.iam.gserviceaccount.
 Minimal requirements: [VPC-native](https://cloud.google.com/traffic-director/docs/security-proxyless-setup)
 cluster with [Workload Identity](https://cloud.google.com/kubernetes-engine/docs/how-to/workload-identity) enabled. 
 ```shell
-gcloud beta container clusters create "${CLUSTER_NAME}" \
+gcloud container clusters create "${CLUSTER_NAME}" \
+ --scopes=cloud-platform \
  --zone="${ZONE}" \
  --enable-ip-alias \
  --workload-pool="${PROJECT_ID}.svc.id.goog" \
  --workload-metadata=GKE_METADATA \
  --tags=allow-health-checks
 ```
+
+For security tests you also need to create CAs and configure the cluster to use those CAs
+as described
+[here](https://cloud.google.com/traffic-director/docs/security-proxyless-setup#configure-cas).
 
 ##### Create the firewall rule
 Allow [health checking mechanisms](https://cloud.google.com/traffic-director/docs/set-up-proxyless-gke#creating_the_health_check_firewall_rule_and_backend_service)
@@ -95,8 +114,19 @@ gcloud iam service-accounts create "${WORKLOAD_SA_NAME}" \
 Enable the service account to [access the Traffic Director API](https://cloud.google.com/traffic-director/docs/prepare-for-envoy-setup#enable-service-account).
 ```shell
 gcloud projects add-iam-policy-binding "${PROJECT_ID}" \
-   --member="serviceAccount:${WORKLOAD_SERVICE_ACCOUNT}" \
+   --member="serviceAccount:${WORKLOAD_SA_EMAIL}" \
    --role="roles/trafficdirector.client"
+```
+
+##### Allow access to images
+The test framework needs read access to the client and server images and the bootstrap
+generator image. You may have these images in your project but if you want to use these
+from the grpc-testing project you will have to grant the necessary access to these images
+using https://cloud.google.com/container-registry/docs/access-control#grant or a
+gsutil command. For example, to grant access to images stored in `grpc-testing` project GCR, run:
+
+```sh
+gsutil iam ch "serviceAccount:${GCE_SA}:objectViewer" gs://artifacts.grpc-testing.appspot.com/
 ```
 
 ##### Allow test driver to configure workload identity automatically
@@ -130,8 +160,11 @@ END
 
 ##### Configure GKE cluster access
 ```shell
+# Unless you're using GCP VM with preconfigured Application Default Credentials, acquire them for your user
+gcloud auth application-default login
+
 # Configuring GKE cluster access for kubectl
-gcloud container clusters get-credentials "your_gke_cluster_name" --zone "your_gke_cluster_zone"
+gcloud container clusters get-credentials "${CLUSTER_NAME}" --zone "${ZONE}"
 
 # Save generated kube context name
 export KUBE_CONTEXT="$(kubectl config current-context)"
@@ -159,62 +192,6 @@ python -m grpc_tools.protoc --proto_path=../../../ \
 
 # Basic usage
 
-### xDS Baseline Tests
-
-Test suite meant to confirm that basic xDS features work as expected. Executing
-it before other test suites will help to identify whether test failure related
-to specific features under test, or caused by unrelated infrastructure
-disturbances.
-
-The client and server images are created based on Git commit hashes, but not
-every single one of them. It is triggered nightly and per-release. For example,
-the commit we are using below (`d22f93e1ade22a1e026b57210f6fc21f7a3ca0cf`) comes
-from branch `v1.37.x` in `grpc-java` repo.
-
-```shell
-# Help
-python -m tests.baseline_test --help
-python -m tests.baseline_test --helpfull
-
-# Run on grpc-testing cluster
-python -m tests.baseline_test \
-  --flagfile="config/grpc-testing.cfg" \
-  --kube_context="${KUBE_CONTEXT}" \
-  --server_image="gcr.io/grpc-testing/xds-interop/java-server:d22f93e1ade22a1e026b57210f6fc21f7a3ca0cf" \
-  --client_image="gcr.io/grpc-testing/xds-interop/java-client:d22f93e1ade22a1e026b57210f6fc21f7a3ca0cf"
-```
-
-### xDS Security Tests
-```shell
-# Help
-python -m tests.security_test --help
-python -m tests.security_test --helpfull
-
-# Run on grpc-testing cluster
-python -m tests.security_test \
-  --flagfile="config/grpc-testing.cfg" \
-  --kube_context="${KUBE_CONTEXT}" \
-  --server_image="gcr.io/grpc-testing/xds-interop/java-server:d22f93e1ade22a1e026b57210f6fc21f7a3ca0cf" \
-  --client_image="gcr.io/grpc-testing/xds-interop/java-client:d22f93e1ade22a1e026b57210f6fc21f7a3ca0cf"
-```
-
-### Test namespace
-It's possible to run multiple xDS interop test workloads in the same project.
-But we need to ensure the name of the global resources won't conflict. This can
-be solved by supplying `--namespace` and `--server_xds_port`. The xDS port needs
-to be unique across the entire project (default port range is [8080, 8280],
-avoid if possible). Here is an example:
-
-```shell
-python3 -m tests.baseline_test \
-  --flagfile="config/grpc-testing.cfg" \
-  --kube_context="${KUBE_CONTEXT}" \
-  --server_image="gcr.io/grpc-testing/xds-interop/java-server:d22f93e1ade22a1e026b57210f6fc21f7a3ca0cf" \
-  --client_image="gcr.io/grpc-testing/xds-interop/java-client:d22f93e1ade22a1e026b57210f6fc21f7a3ca0cf" \
-  --namespace="box-$(date +"%F-%R")" \
-  --server_xds_port="$(($RANDOM%1000 + 34567))"
-```
-
 ## Local development
 This test driver allows running tests locally against remote GKE clusters, right
 from your dev environment. You need:
@@ -241,9 +218,53 @@ as a starting point:
 cp config/local-dev.cfg.example config/local-dev.cfg
 ```
 
+If you exported environment variables in the above sections, you can
+template them into the local config (note this recreates the config):
+
+```shell
+envsubst < config/local-dev.cfg.example > config/local-dev.cfg
+```
+
 Learn more about flagfiles in [abseil documentation](https://abseil.io/docs/python/guides/flags#a-note-about---flagfile).
 
-### Helper scripts
+## Test suites
+
+See the full list of available test suites in the [`tests/`](https://github.com/grpc/grpc/tree/master/tools/run_tests/xds_k8s_test_driver/tests) folder. 
+
+### xDS Baseline Tests
+
+Test suite meant to confirm that basic xDS features work as expected. Executing
+it before other test suites will help to identify whether test failure related
+to specific features under test, or caused by unrelated infrastructure
+disturbances.
+
+```shell
+# Help
+python -m tests.baseline_test --help
+python -m tests.baseline_test --helpfull
+
+# Run the baseline test with local-dev.cfg settings
+python -m tests.baseline_test --flagfile="config/local-dev.cfg"
+  
+# Same as above, but using the helper script
+./run.sh tests/baseline_test.py
+```
+
+### xDS Security Tests
+Test suite meant to verify mTLS/TLS features. Note that this requires
+additional environment configuration. For more details, and for the 
+setup for the security tests, see
+["Setting up Traffic Director service security with proxyless gRPC"](https://cloud.google.com/traffic-director/docs/security-proxyless-setup) user guide.
+
+```shell
+# Run the security test with local-dev.cfg settings
+python -m tests.security_test --flagfile="config/local-dev.cfg"
+
+# Same as above, but using the helper script
+./run.sh tests/security_test.py
+```
+
+## Helper scripts
 You can use interop xds-k8s [`bin/`](https://github.com/grpc/grpc/tree/master/tools/run_tests/xds_k8s_test_driver/bin)
 scripts to configure TD, start k8s instances step-by-step, and keep them alive
 for as long as you need. 
@@ -290,12 +311,13 @@ This tool performs the following:
 EXAMPLES:
 ./run.sh bin/run_td_setup.py --help
 ./run.sh bin/run_td_setup.py --helpfull
-XDS_K8S_CONFIG=./path-to-flagfile.cfg ./run.sh bin/run_td_setup.py --namespace=override-namespace
+XDS_K8S_CONFIG=./path-to-flagfile.cfg ./run.sh bin/run_td_setup.py --resource_suffix=override-suffix
 ./run.sh tests/baseline_test.py
 ./run.sh tests/security_test.py --verbosity=1 --logger_levels=__main__:DEBUG,framework:DEBUG
 ./run.sh tests/security_test.py SecurityTest.test_mtls --nocheck_local_certs
 ```
 
+## Partial setups
 ### Regular workflow
 ```shell
 # Setup Traffic Director
@@ -332,7 +354,7 @@ XDS_K8S_CONFIG=./path-to-flagfile.cfg ./run.sh bin/run_td_setup.py --namespace=o
 # Client: all services always on port 8079
 kubectl port-forward deployment.apps/psm-grpc-client 8079
 
-# Server regular mode: all grpc services on port 8079
+# Server regular mode: all grpc services on port 8080
 kubectl port-forward deployment.apps/psm-grpc-server 8080
 # OR
 # Server secure mode: TestServiceImpl is on 8080, 

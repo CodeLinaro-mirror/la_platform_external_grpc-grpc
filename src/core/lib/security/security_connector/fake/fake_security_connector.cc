@@ -20,27 +20,42 @@
 
 #include "src/core/lib/security/security_connector/fake/fake_security_connector.h"
 
-#include <stdbool.h>
+#include <stdlib.h>
+#include <string.h>
 
+#include <utility>
+
+#include "absl/status/status.h"
 #include "absl/strings/str_cat.h"
+#include "absl/strings/string_view.h"
 
+#include <grpc/grpc_security_constants.h>
 #include <grpc/support/alloc.h>
 #include <grpc/support/log.h>
 #include <grpc/support/string_util.h>
 
 #include "src/core/ext/filters/client_channel/lb_policy/grpclb/grpclb.h"
-#include "src/core/ext/transport/chttp2/alpn/alpn.h"
-#include "src/core/ext/xds/xds_channel_args.h"
 #include "src/core/lib/channel/channel_args.h"
-#include "src/core/lib/channel/handshaker.h"
 #include "src/core/lib/gpr/string.h"
+#include "src/core/lib/gpr/useful.h"
+#include "src/core/lib/gprpp/debug_location.h"
 #include "src/core/lib/gprpp/host_port.h"
 #include "src/core/lib/gprpp/ref_counted_ptr.h"
+#include "src/core/lib/iomgr/closure.h"
+#include "src/core/lib/iomgr/endpoint.h"
+#include "src/core/lib/iomgr/error.h"
+#include "src/core/lib/iomgr/exec_ctx.h"
+#include "src/core/lib/iomgr/iomgr_fwd.h"
+#include "src/core/lib/promise/arena_promise.h"
+#include "src/core/lib/promise/poll.h"
+#include "src/core/lib/promise/promise.h"
 #include "src/core/lib/security/context/security_context.h"
 #include "src/core/lib/security/credentials/credentials.h"
 #include "src/core/lib/security/credentials/fake/fake_credentials.h"
 #include "src/core/lib/security/transport/security_handshaker.h"
+#include "src/core/lib/transport/handshaker.h"
 #include "src/core/tsi/fake_transport_security.h"
+#include "src/core/tsi/transport_security_interface.h"
 
 namespace {
 class grpc_fake_channel_security_connector final
@@ -92,12 +107,12 @@ class grpc_fake_channel_security_connector final
     c = strcmp(target_, other->target_);
     if (c != 0) return c;
     if (expected_targets_ == nullptr || other->expected_targets_ == nullptr) {
-      c = GPR_ICMP(expected_targets_, other->expected_targets_);
+      c = grpc_core::QsortCompare(expected_targets_, other->expected_targets_);
     } else {
       c = strcmp(expected_targets_, other->expected_targets_);
     }
     if (c != 0) return c;
-    return GPR_ICMP(is_lb_channel_, other->is_lb_channel_);
+    return grpc_core::QsortCompare(is_lb_channel_, other->is_lb_channel_);
   }
 
   void add_handshakers(const grpc_channel_args* args,
@@ -107,10 +122,8 @@ class grpc_fake_channel_security_connector final
         tsi_create_fake_handshaker(/*is_client=*/true), this, args));
   }
 
-  bool check_call_host(absl::string_view host,
-                       grpc_auth_context* /*auth_context*/,
-                       grpc_closure* /*on_call_host_checked*/,
-                       grpc_error_handle* /*error*/) override {
+  grpc_core::ArenaPromise<absl::Status> CheckCallHost(
+      absl::string_view host, grpc_auth_context*) override {
     absl::string_view authority_hostname;
     absl::string_view authority_ignored_port;
     absl::string_view target_hostname;
@@ -136,12 +149,7 @@ class grpc_fake_channel_security_connector final
               target_);
       abort();
     }
-    return true;
-  }
-
-  void cancel_check_call_host(grpc_closure* /*on_call_host_checked*/,
-                              grpc_error_handle error) override {
-    GRPC_ERROR_UNREF(error);
+    return grpc_core::ImmediateOkStatus();
   }
 
   char* target() const { return target_; }
@@ -214,10 +222,9 @@ class grpc_fake_channel_security_connector final
   char* target_name_override_;
 };
 
-static void fake_check_peer(
-    grpc_security_connector* /*sc*/, tsi_peer peer,
-    grpc_core::RefCountedPtr<grpc_auth_context>* auth_context,
-    grpc_closure* on_peer_checked) {
+void fake_check_peer(grpc_security_connector* /*sc*/, tsi_peer peer,
+                     grpc_core::RefCountedPtr<grpc_auth_context>* auth_context,
+                     grpc_closure* on_peer_checked) {
   const char* prop_name;
   grpc_error_handle error = GRPC_ERROR_NONE;
   *auth_context = nullptr;
@@ -229,10 +236,9 @@ static void fake_check_peer(
   prop_name = peer.properties[0].name;
   if (prop_name == nullptr ||
       strcmp(prop_name, TSI_CERTIFICATE_TYPE_PEER_PROPERTY) != 0) {
-    error = GRPC_ERROR_CREATE_FROM_COPIED_STRING(
+    error = GRPC_ERROR_CREATE_FROM_CPP_STRING(
         absl::StrCat("Unexpected property in fake peer: ",
-                     prop_name == nullptr ? "<EMPTY>" : prop_name)
-            .c_str());
+                     prop_name == nullptr ? "<EMPTY>" : prop_name));
     goto end;
   }
   if (strncmp(peer.properties[0].value.data, TSI_FAKE_CERTIFICATE_TYPE,
@@ -244,10 +250,9 @@ static void fake_check_peer(
   prop_name = peer.properties[1].name;
   if (prop_name == nullptr ||
       strcmp(prop_name, TSI_SECURITY_LEVEL_PEER_PROPERTY) != 0) {
-    error = GRPC_ERROR_CREATE_FROM_COPIED_STRING(
+    error = GRPC_ERROR_CREATE_FROM_CPP_STRING(
         absl::StrCat("Unexpected property in fake peer: ",
-                     prop_name == nullptr ? "<EMPTY>" : prop_name)
-            .c_str());
+                     prop_name == nullptr ? "<EMPTY>" : prop_name));
     goto end;
   }
   if (strncmp(peer.properties[1].value.data, TSI_FAKE_SECURITY_LEVEL,

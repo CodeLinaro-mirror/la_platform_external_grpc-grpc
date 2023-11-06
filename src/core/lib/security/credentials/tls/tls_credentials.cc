@@ -21,36 +21,50 @@
 #include "src/core/lib/security/credentials/tls/tls_credentials.h"
 
 #include <cstring>
+#include <utility>
+
+#include "absl/strings/string_view.h"
 
 #include <grpc/grpc.h>
-#include <grpc/support/alloc.h>
+#include <grpc/grpc_security_constants.h>
 #include <grpc/support/log.h>
-#include <grpc/support/string_util.h>
 
 #include "src/core/lib/channel/channel_args.h"
+#include "src/core/lib/gpr/useful.h"
+#include "src/core/lib/security/credentials/tls/grpc_tls_certificate_verifier.h"
+#include "src/core/lib/security/credentials/tls/grpc_tls_credentials_options.h"
 #include "src/core/lib/security/security_connector/tls/tls_security_connector.h"
-
-#define GRPC_CREDENTIALS_TYPE_TLS "Tls"
+#include "src/core/tsi/ssl_transport_security.h"
 
 namespace {
 
-bool CredentialOptionSanityCheck(const grpc_tls_credentials_options* options,
+bool CredentialOptionSanityCheck(grpc_tls_credentials_options* options,
                                  bool is_client) {
   if (options == nullptr) {
     gpr_log(GPR_ERROR, "TLS credentials options is nullptr.");
     return false;
   }
-  // TODO(ZhenLian): remove this when it is also supported on server side.
-  if (!is_client && options->server_authorization_check_config() != nullptr) {
-    gpr_log(GPR_INFO,
-            "Server's credentials options should not contain server "
-            "authorization check config.");
-  }
-  if (options->server_verification_option() != GRPC_TLS_SERVER_VERIFICATION &&
-      options->server_authorization_check_config() == nullptr) {
+  // In the following conditions, there won't be any issues, but it might
+  // indicate callers are doing something wrong with the API.
+  if (is_client && options->cert_request_type() !=
+                       GRPC_SSL_DONT_REQUEST_CLIENT_CERTIFICATE) {
     gpr_log(GPR_ERROR,
-            "Should provider custom verifications if bypassing default ones.");
-    return false;
+            "Client's credentials options should not set cert_request_type.");
+  }
+  if (!is_client && !options->verify_server_cert()) {
+    gpr_log(GPR_ERROR,
+            "Server's credentials options should not set verify_server_cert.");
+  }
+  // In the following conditions, there could be severe security issues.
+  if (is_client && options->certificate_verifier() == nullptr) {
+    // If no verifier is specified on the client side, use the hostname verifier
+    // as default. Users who want to bypass all the verifier check should
+    // implement an external verifier instead.
+    gpr_log(GPR_INFO,
+            "No verifier specified on the client side. Using default hostname "
+            "verifier");
+    options->set_certificate_verifier(
+        grpc_core::MakeRefCounted<grpc_core::HostNameCertificateVerifier>());
   }
   return true;
 }
@@ -59,8 +73,7 @@ bool CredentialOptionSanityCheck(const grpc_tls_credentials_options* options,
 
 TlsCredentials::TlsCredentials(
     grpc_core::RefCountedPtr<grpc_tls_credentials_options> options)
-    : grpc_channel_credentials(GRPC_CREDENTIALS_TYPE_TLS),
-      options_(std::move(options)) {}
+    : options_(std::move(options)) {}
 
 TlsCredentials::~TlsCredentials() {}
 
@@ -98,10 +111,21 @@ TlsCredentials::create_security_connector(
   return sc;
 }
 
+grpc_core::UniqueTypeName TlsCredentials::type() const {
+  static grpc_core::UniqueTypeName::Factory kFactory("Tls");
+  return kFactory.Create();
+}
+
+int TlsCredentials::cmp_impl(const grpc_channel_credentials* other) const {
+  const TlsCredentials* o = static_cast<const TlsCredentials*>(other);
+  if (*options_ == *o->options_) return 0;
+  return grpc_core::QsortCompare(
+      static_cast<const grpc_channel_credentials*>(this), other);
+}
+
 TlsServerCredentials::TlsServerCredentials(
     grpc_core::RefCountedPtr<grpc_tls_credentials_options> options)
-    : grpc_server_credentials(GRPC_CREDENTIALS_TYPE_TLS),
-      options_(std::move(options)) {}
+    : options_(std::move(options)) {}
 
 TlsServerCredentials::~TlsServerCredentials() {}
 
@@ -110,6 +134,11 @@ TlsServerCredentials::create_security_connector(
     const grpc_channel_args* /* args */) {
   return grpc_core::TlsServerSecurityConnector::
       CreateTlsServerSecurityConnector(this->Ref(), options_);
+}
+
+grpc_core::UniqueTypeName TlsServerCredentials::type() const {
+  static grpc_core::UniqueTypeName::Factory kFactory("Tls");
+  return kFactory.Create();
 }
 
 /** -- Wrapper APIs declared in grpc_security.h -- **/

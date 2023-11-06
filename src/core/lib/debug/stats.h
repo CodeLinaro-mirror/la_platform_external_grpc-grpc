@@ -21,9 +21,12 @@
 
 #include <grpc/support/port_platform.h>
 
+#include <stddef.h>
+
 #include <string>
 
 #include <grpc/support/atm.h>
+
 #include "src/core/lib/debug/stats_data.h"
 #include "src/core/lib/iomgr/exec_ctx.h"
 
@@ -53,7 +56,6 @@ extern grpc_stats_data* grpc_stats_per_cpu_storage;
 #endif /* defined(GRPC_COLLECT_STATS) || !defined(NDEBUG) */
 
 void grpc_stats_init(void);
-void grpc_stats_shutdown(void);
 void grpc_stats_collect(grpc_stats_data* output);
 // c = b-a
 void grpc_stats_diff(const grpc_stats_data* b, const grpc_stats_data* a,
@@ -67,4 +69,4 @@ double grpc_stats_histo_percentile(const grpc_stats_data* stats,
 size_t grpc_stats_histo_count(const grpc_stats_data* stats,
                               grpc_stats_histograms histogram);
 
-#endif
+#endif  // GRPC_CORE_LIB_DEBUG_STATS_H

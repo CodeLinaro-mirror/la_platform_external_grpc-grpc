@@ -18,12 +18,27 @@
 
 #ifndef GRPC_CORE_LIB_SECURITY_SECURITY_CONNECTOR_INSECURE_INSECURE_SECURITY_CONNECTOR_H
 #define GRPC_CORE_LIB_SECURITY_SECURITY_CONNECTOR_INSECURE_INSECURE_SECURITY_CONNECTOR_H
-
 #include <grpc/support/port_platform.h>
 
-#include "src/core/lib/security/context/security_context.h"
+#include <utility>
+
+#include "absl/status/status.h"
+#include "absl/strings/string_view.h"
+
+#include <grpc/grpc.h>
+#include <grpc/grpc_security.h>
+#include <grpc/impl/codegen/grpc_types.h>
+
+#include "src/core/lib/gprpp/ref_counted_ptr.h"
+#include "src/core/lib/iomgr/closure.h"
+#include "src/core/lib/iomgr/endpoint.h"
+#include "src/core/lib/iomgr/error.h"
+#include "src/core/lib/iomgr/iomgr_fwd.h"
+#include "src/core/lib/promise/arena_promise.h"
 #include "src/core/lib/security/credentials/credentials.h"
 #include "src/core/lib/security/security_connector/security_connector.h"
+#include "src/core/lib/transport/handshaker.h"
+#include "src/core/tsi/transport_security_interface.h"
 
 namespace grpc_core {
 
@@ -39,25 +54,20 @@ class InsecureChannelSecurityConnector
     : public grpc_channel_security_connector {
  public:
   InsecureChannelSecurityConnector(
-      grpc_core::RefCountedPtr<grpc_channel_credentials> channel_creds,
-      grpc_core::RefCountedPtr<grpc_call_credentials> request_metadata_creds)
-      : grpc_channel_security_connector(/* url_scheme */ nullptr,
-                                        std::move(channel_creds),
+      RefCountedPtr<grpc_channel_credentials> channel_creds,
+      RefCountedPtr<grpc_call_credentials> request_metadata_creds)
+      : grpc_channel_security_connector("", std::move(channel_creds),
                                         std::move(request_metadata_creds)) {}
 
-  bool check_call_host(absl::string_view host, grpc_auth_context* auth_context,
-                       grpc_closure* on_call_host_checked,
-                       grpc_error_handle* error) override;
-
-  void cancel_check_call_host(grpc_closure* on_call_host_checked,
-                              grpc_error_handle error) override;
+  ArenaPromise<absl::Status> CheckCallHost(
+      absl::string_view host, grpc_auth_context* auth_context) override;
 
   void add_handshakers(const grpc_channel_args* args,
                        grpc_pollset_set* /* interested_parties */,
-                       grpc_core::HandshakeManager* handshake_manager) override;
+                       HandshakeManager* handshake_manager) override;
 
   void check_peer(tsi_peer peer, grpc_endpoint* ep,
-                  grpc_core::RefCountedPtr<grpc_auth_context>* auth_context,
+                  RefCountedPtr<grpc_auth_context>* auth_context,
                   grpc_closure* on_peer_checked) override;
 
   void cancel_check_peer(grpc_closure* /*on_peer_checked*/,
@@ -71,16 +81,16 @@ class InsecureChannelSecurityConnector
 class InsecureServerSecurityConnector : public grpc_server_security_connector {
  public:
   explicit InsecureServerSecurityConnector(
-      grpc_core::RefCountedPtr<grpc_server_credentials> server_creds)
-      : grpc_server_security_connector(nullptr /* url_scheme */,
+      RefCountedPtr<grpc_server_credentials> server_creds)
+      : grpc_server_security_connector("" /* url_scheme */,
                                        std::move(server_creds)) {}
 
   void add_handshakers(const grpc_channel_args* args,
                        grpc_pollset_set* /* interested_parties */,
-                       grpc_core::HandshakeManager* handshake_manager) override;
+                       HandshakeManager* handshake_manager) override;
 
   void check_peer(tsi_peer peer, grpc_endpoint* ep,
-                  grpc_core::RefCountedPtr<grpc_auth_context>* auth_context,
+                  RefCountedPtr<grpc_auth_context>* auth_context,
                   grpc_closure* on_peer_checked) override;
 
   void cancel_check_peer(grpc_closure* /*on_peer_checked*/,

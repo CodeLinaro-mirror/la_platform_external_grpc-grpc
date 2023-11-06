@@ -16,6 +16,8 @@
  *
  */
 
+#include "src/core/lib/iomgr/load_file.h"
+
 #include <stdio.h>
 #include <string.h>
 
@@ -26,7 +28,6 @@
 
 #include "src/core/lib/gpr/string.h"
 #include "src/core/lib/gpr/tmpfile.h"
-#include "src/core/lib/iomgr/load_file.h"
 #include "test/core/util/test_config.h"
 
 #define LOG_TEST_NAME(x) gpr_log(GPR_INFO, "%s", x)
@@ -48,11 +49,11 @@ static void test_load_empty_file(void) {
   fclose(tmp);
 
   error = grpc_load_file(tmp_name, 0, &slice);
-  GPR_ASSERT(error == GRPC_ERROR_NONE);
+  GPR_ASSERT(GRPC_ERROR_IS_NONE(error));
   GPR_ASSERT(GRPC_SLICE_LENGTH(slice) == 0);
 
   error = grpc_load_file(tmp_name, 1, &slice_with_null_term);
-  GPR_ASSERT(error == GRPC_ERROR_NONE);
+  GPR_ASSERT(GRPC_ERROR_IS_NONE(error));
   GPR_ASSERT(GRPC_SLICE_LENGTH(slice_with_null_term) == 1);
   GPR_ASSERT(GRPC_SLICE_START_PTR(slice_with_null_term)[0] == 0);
 
@@ -77,7 +78,7 @@ static void test_load_failure(void) {
   remove(tmp_name);
 
   error = grpc_load_file(tmp_name, 0, &slice);
-  GPR_ASSERT(error != GRPC_ERROR_NONE);
+  GPR_ASSERT(!GRPC_ERROR_IS_NONE(error));
   GRPC_ERROR_UNREF(error);
   GPR_ASSERT(GRPC_SLICE_LENGTH(slice) == 0);
   gpr_free(tmp_name);
@@ -101,12 +102,12 @@ static void test_load_small_file(void) {
   fclose(tmp);
 
   error = grpc_load_file(tmp_name, 0, &slice);
-  GPR_ASSERT(error == GRPC_ERROR_NONE);
+  GPR_ASSERT(GRPC_ERROR_IS_NONE(error));
   GPR_ASSERT(GRPC_SLICE_LENGTH(slice) == strlen(blah));
   GPR_ASSERT(!memcmp(GRPC_SLICE_START_PTR(slice), blah, strlen(blah)));
 
   error = grpc_load_file(tmp_name, 1, &slice_with_null_term);
-  GPR_ASSERT(error == GRPC_ERROR_NONE);
+  GPR_ASSERT(GRPC_ERROR_IS_NONE(error));
   GPR_ASSERT(GRPC_SLICE_LENGTH(slice_with_null_term) == (strlen(blah) + 1));
   GPR_ASSERT(strcmp((const char*)GRPC_SLICE_START_PTR(slice_with_null_term),
                     blah) == 0);
@@ -138,7 +139,7 @@ static void test_load_big_file(void) {
   fclose(tmp);
 
   error = grpc_load_file(tmp_name, 0, &slice);
-  GPR_ASSERT(error == GRPC_ERROR_NONE);
+  GPR_ASSERT(GRPC_ERROR_IS_NONE(error));
   GPR_ASSERT(GRPC_SLICE_LENGTH(slice) == buffer_size);
   current = GRPC_SLICE_START_PTR(slice);
   for (i = 0; i < buffer_size; i++) {
@@ -152,7 +153,7 @@ static void test_load_big_file(void) {
 }
 
 int main(int argc, char** argv) {
-  grpc::testing::TestEnvironment env(argc, argv);
+  grpc::testing::TestEnvironment env(&argc, argv);
   grpc_init();
   test_load_empty_file();
   test_load_failure();

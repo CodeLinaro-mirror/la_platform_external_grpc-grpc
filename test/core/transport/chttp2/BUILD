@@ -12,23 +12,39 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-load("//bazel:grpc_build_system.bzl", "grpc_cc_binary", "grpc_cc_library", "grpc_cc_test", "grpc_package")
+load("//bazel:grpc_build_system.bzl", "grpc_cc_test", "grpc_package")
+load("//test/core/util:grpc_fuzzer.bzl", "grpc_proto_fuzzer")
+load("//bazel:custom_exec_properties.bzl", "LARGE_MACHINE")
 
-licenses(["notice"])  # Apache v2
+licenses(["notice"])
 
 grpc_package(name = "test/core/transport/chttp2")
 
-load("//test/core/util:grpc_fuzzer.bzl", "grpc_fuzzer")
-load("//bazel:custom_exec_properties.bzl", "LARGE_MACHINE")
-
-grpc_fuzzer(
+grpc_proto_fuzzer(
     name = "hpack_parser_fuzzer",
     srcs = ["hpack_parser_fuzzer_test.cc"],
     corpus = "hpack_parser_corpus",
+    proto = "hpack_parser_fuzzer.proto",
     tags = ["no_windows"],
     deps = [
         "//:grpc",
         "//test/core/util:grpc_test_util",
+    ],
+)
+
+grpc_proto_fuzzer(
+    name = "flow_control_fuzzer",
+    srcs = ["flow_control_fuzzer.cc"],
+    corpus = "flow_control_fuzzer_corpus",
+    language = "C++",
+    proto = "flow_control_fuzzer.proto",
+    tags = ["no_windows"],
+    uses_event_engine = False,
+    uses_polling = False,
+    deps = [
+        "//:chttp2_flow_control",
+        "//:gpr",
+        "//test/core/util:grpc_suppressions",
     ],
 )
 
@@ -47,6 +63,7 @@ grpc_cc_test(
     name = "bin_decoder_test",
     srcs = ["bin_decoder_test.cc"],
     language = "C++",
+    uses_event_engine = False,
     uses_polling = False,
     deps = [
         "//:gpr",
@@ -59,6 +76,7 @@ grpc_cc_test(
     name = "bin_encoder_test",
     srcs = ["bin_encoder_test.cc"],
     language = "C++",
+    uses_event_engine = False,
     uses_polling = False,
     deps = [
         "//:gpr",
@@ -74,6 +92,7 @@ grpc_cc_test(
         "gtest",
     ],
     language = "C++",
+    uses_event_engine = False,
     uses_polling = False,
     deps = [
         "//:gpr",
@@ -83,9 +102,39 @@ grpc_cc_test(
 )
 
 grpc_cc_test(
+    name = "flow_control_test",
+    srcs = ["flow_control_test.cc"],
+    external_deps = [
+        "gtest",
+    ],
+    language = "C++",
+    uses_event_engine = False,
+    uses_polling = False,
+    deps = [
+        "//:chttp2_flow_control",
+        "//:resource_quota",
+        "//test/core/util:grpc_suppressions",
+    ],
+)
+
+grpc_cc_test(
+    name = "graceful_shutdown_test",
+    srcs = ["graceful_shutdown_test.cc"],
+    external_deps = ["gtest"],
+    language = "C++",
+    deps = [
+        "//:gpr",
+        "//:grpc",
+        "//test/core/end2end:cq_verifier",
+        "//test/core/util:grpc_test_util",
+    ],
+)
+
+grpc_cc_test(
     name = "hpack_encoder_test",
     srcs = ["hpack_encoder_test.cc"],
     language = "C++",
+    uses_event_engine = False,
     uses_polling = False,
     deps = [
         "//:gpr",
@@ -97,7 +146,9 @@ grpc_cc_test(
 grpc_cc_test(
     name = "hpack_parser_test",
     srcs = ["hpack_parser_test.cc"],
+    external_deps = ["gtest"],
     language = "C++",
+    uses_event_engine = False,
     uses_polling = False,
     deps = [
         "//:gpr",
@@ -107,9 +158,11 @@ grpc_cc_test(
 )
 
 grpc_cc_test(
-    name = "hpack_table_test",
-    srcs = ["hpack_table_test.cc"],
+    name = "hpack_parser_table_test",
+    srcs = ["hpack_parser_table_test.cc"],
+    external_deps = ["gtest"],
     language = "C++",
+    uses_event_engine = False,
     uses_polling = False,
     deps = [
         "//:gpr",
@@ -130,6 +183,19 @@ grpc_cc_test(
 )
 
 grpc_cc_test(
+    name = "streams_not_seen_test",
+    srcs = ["streams_not_seen_test.cc"],
+    external_deps = ["gtest"],
+    language = "C++",
+    deps = [
+        "//:gpr",
+        "//:grpc",
+        "//test/core/end2end:cq_verifier",
+        "//test/core/util:grpc_test_util",
+    ],
+)
+
+grpc_cc_test(
     name = "settings_timeout_test",
     srcs = ["settings_timeout_test.cc"],
     external_deps = [
@@ -145,7 +211,7 @@ grpc_cc_test(
 )
 
 grpc_cc_test(
-    "too_many_pings_test",
+    name = "too_many_pings_test",
     timeout = "long",  # Required for internal test infrastructure (cl/325757166)
     srcs = ["too_many_pings_test.cc"],
     external_deps = ["gtest"],
@@ -164,6 +230,7 @@ grpc_cc_test(
     name = "varint_test",
     srcs = ["varint_test.cc"],
     language = "C++",
+    uses_event_engine = False,
     uses_polling = False,
     deps = [
         "//:gpr",

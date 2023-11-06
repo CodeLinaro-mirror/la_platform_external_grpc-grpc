@@ -18,10 +18,12 @@
 
 #include <grpc/support/port_platform.h>
 
-#include "src/core/lib/surface/completion_queue.h"
 #include "src/core/lib/surface/completion_queue_factory.h"
 
+#include <grpc/grpc.h>
 #include <grpc/support/log.h>
+
+#include "src/core/lib/surface/completion_queue.h"
 
 /*
  * == Default completion queue factory implementation ==
