@@ -16,18 +16,21 @@
 //
 //
 
-#ifndef GRPC_CORE_EXT_XDS_XDS_CHANNEL_STACK_MODIFIER_H
-#define GRPC_CORE_EXT_XDS_XDS_CHANNEL_STACK_MODIFIER_H
+#ifndef GRPC_SRC_CORE_EXT_XDS_XDS_CHANNEL_STACK_MODIFIER_H
+#define GRPC_SRC_CORE_EXT_XDS_XDS_CHANNEL_STACK_MODIFIER_H
 
 #include <grpc/support/port_platform.h>
 
 #include <utility>
 #include <vector>
 
-#include <grpc/impl/codegen/grpc_types.h>
+#include "absl/strings/string_view.h"
+
+#include <grpc/grpc.h>
 
 #include "src/core/lib/channel/channel_fwd.h"
 #include "src/core/lib/channel/channel_stack_builder.h"
+#include "src/core/lib/gpr/useful.h"
 #include "src/core/lib/gprpp/ref_counted.h"
 #include "src/core/lib/gprpp/ref_counted_ptr.h"
 
@@ -47,6 +50,11 @@ class XdsChannelStackModifier : public RefCounted<XdsChannelStackModifier> {
   grpc_arg MakeChannelArg() const;
   static RefCountedPtr<XdsChannelStackModifier> GetFromChannelArgs(
       const grpc_channel_args& args);
+  static absl::string_view ChannelArgName();
+  static int ChannelArgsCompare(const XdsChannelStackModifier* a,
+                                const XdsChannelStackModifier* b) {
+    return QsortCompare(a, b);
+  }
 
  private:
   std::vector<const grpc_channel_filter*> filters_;
@@ -54,4 +62,4 @@ class XdsChannelStackModifier : public RefCounted<XdsChannelStackModifier> {
 
 }  // namespace grpc_core
 
-#endif /* GRPC_CORE_EXT_XDS_XDS_CHANNEL_STACK_MODIFIER_H */
+#endif  // GRPC_SRC_CORE_EXT_XDS_XDS_CHANNEL_STACK_MODIFIER_H

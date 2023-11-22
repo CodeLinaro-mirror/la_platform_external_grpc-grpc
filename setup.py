@@ -76,6 +76,7 @@ UPB_GRPC_GENERATED_INCLUDE = (os.path.join('src', 'core', 'ext',
                                            'upb-generated'),)
 UPBDEFS_GRPC_GENERATED_INCLUDE = (os.path.join('src', 'core', 'ext',
                                                'upbdefs-generated'),)
+UTF8_RANGE_INCLUDE = (os.path.join('third_party', 'utf8_range'),)
 XXHASH_INCLUDE = (os.path.join('third_party', 'xxhash'),)
 ZLIB_INCLUDE = (os.path.join('third_party', 'zlib'),)
 README = os.path.join(PYTHON_STEM, 'README.rst')
@@ -101,12 +102,11 @@ CLASSIFIERS = [
     'Development Status :: 5 - Production/Stable',
     'Programming Language :: Python',
     'Programming Language :: Python :: 3',
-    'Programming Language :: Python :: 3.5',
-    'Programming Language :: Python :: 3.6',
     'Programming Language :: Python :: 3.7',
     'Programming Language :: Python :: 3.8',
     'Programming Language :: Python :: 3.9',
     'Programming Language :: Python :: 3.10',
+    'Programming Language :: Python :: 3.11',
     'License :: OSI Approved :: Apache Software License',
 ]
 
@@ -216,11 +216,11 @@ def check_linker_need_libatomic():
         return False
     # Double-check to see if -latomic actually can solve the problem.
     # https://github.com/grpc/grpc/issues/22491
-    cpp_test = subprocess.Popen(
-        [cxx, '-x', 'c++', '-std=c++14', '-', '-latomic'],
-        stdin=PIPE,
-        stdout=PIPE,
-        stderr=PIPE)
+    cpp_test = subprocess.Popen(cxx +
+                                ['-x', 'c++', '-std=c++14', '-', '-latomic'],
+                                stdin=PIPE,
+                                stdout=PIPE,
+                                stderr=PIPE)
     cpp_test.communicate(input=code_test)
     return cpp_test.returncode == 0
 
@@ -314,7 +314,8 @@ EXTENSION_INCLUDE_DIRECTORIES = ((PYTHON_STEM,) + CORE_INCLUDE + ABSL_INCLUDE +
                                  RE2_INCLUDE + SSL_INCLUDE + UPB_INCLUDE +
                                  UPB_GRPC_GENERATED_INCLUDE +
                                  UPBDEFS_GRPC_GENERATED_INCLUDE +
-                                 XXHASH_INCLUDE + ZLIB_INCLUDE)
+                                 UTF8_RANGE_INCLUDE + XXHASH_INCLUDE +
+                                 ZLIB_INCLUDE)
 
 EXTENSION_LIBRARIES = ()
 if "linux" in sys.platform:
@@ -376,7 +377,9 @@ if BUILD_WITH_BORING_SSL_ASM and not BUILD_WITH_SYSTEM_OPENSSL:
     elif LINUX_AARCH64 == boringssl_asm_platform:
         asm_key = 'crypto_linux_aarch64'
     elif "mac" in boringssl_asm_platform and "x86_64" in boringssl_asm_platform:
-        asm_key = 'crypto_mac_x86_64'
+        asm_key = 'crypto_apple_x86_64'
+    elif "mac" in boringssl_asm_platform and "arm64" in boringssl_asm_platform:
+        asm_key = 'crypto_apple_aarch64'
     else:
         print("ASM Builds for BoringSSL currently not supported on:",
               boringssl_asm_platform)
@@ -409,6 +412,10 @@ else:
         ('HAVE_CONFIG_H', 1),
         ('GRPC_ENABLE_FORK_SUPPORT', 1),
     )
+
+# Fix for multiprocessing support on Apple devices.
+# TODO(vigneshbabu): Remove this once the poll poller gets fork support.
+DEFINE_MACROS += (('GRPC_DO_NOT_INSTANTIATE_POSIX_POLLER', 1),)
 
 LDFLAGS = tuple(EXTRA_LINK_ARGS)
 CFLAGS = tuple(EXTRA_COMPILE_ARGS)
@@ -482,19 +489,14 @@ PACKAGE_DIRECTORIES = {
     '': PYTHON_STEM,
 }
 
-INSTALL_REQUIRES = (
-    "six>=1.5.2",
-    "futures>=2.2.0; python_version<'3.2'",
-    "enum34>=1.0.4; python_version<'3.4'",
-)
+INSTALL_REQUIRES = ()
+
 EXTRAS_REQUIRES = {
     'protobuf': 'grpcio-tools>={version}'.format(version=grpc_version.VERSION),
 }
 
 SETUP_REQUIRES = INSTALL_REQUIRES + (
-    'Sphinx~=1.8.1',
-    'six>=1.10',
-) if ENABLE_DOCUMENTATION_BUILD else ()
+    'Sphinx~=1.8.1',) if ENABLE_DOCUMENTATION_BUILD else ()
 
 try:
     import Cython
@@ -506,8 +508,8 @@ except ImportError:
             "other commands, but the extension files will fail to build.\n")
     elif need_cython:
         sys.stderr.write(
-            'We could not find Cython. Setup may take 10-20 minutes.\n')
-        SETUP_REQUIRES += ('cython>=0.23',)
+            "We could not find Cython. Setup may take 10-20 minutes.\n")
+        SETUP_REQUIRES += ("cython>=0.23,<3.0.0rc1",)
 
 COMMAND_CLASS = {
     'doc': commands.SphinxDocumentation,
@@ -545,14 +547,20 @@ setuptools.setup(
     author='The gRPC Authors',
     author_email='grpc-io@googlegroups.com',
     url='https://grpc.io',
+    project_urls={
+        "Source Code": "https://github.com/grpc/grpc",
+        "Bug Tracker": "https://github.com/grpc/grpc/issues",
+        'Documentation': 'https://grpc.github.io/grpc/python',
+    },
     license=LICENSE,
     classifiers=CLASSIFIERS,
+    long_description_content_type='text/x-rst',
     long_description=open(README).read(),
     ext_modules=CYTHON_EXTENSION_MODULES,
     packages=list(PACKAGES),
     package_dir=PACKAGE_DIRECTORIES,
     package_data=PACKAGE_DATA,
-    python_requires='>=3.6',
+    python_requires='>=3.7',
     install_requires=INSTALL_REQUIRES,
     extras_require=EXTRAS_REQUIRES,
     setup_requires=SETUP_REQUIRES,

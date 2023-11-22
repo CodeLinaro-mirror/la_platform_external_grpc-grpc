@@ -22,14 +22,17 @@
 #include "absl/strings/str_cat.h"
 #include "absl/strings/str_format.h"
 
+#include <grpc/event_engine/endpoint_config.h>
+
 #include "src/core/ext/filters/client_channel/backup_poller.h"
 #include "src/core/ext/filters/client_channel/lb_policy/xds/xds_channel_args.h"
 #include "src/core/ext/filters/client_channel/resolver/fake/fake_resolver.h"
 #include "src/core/lib/address_utils/sockaddr_utils.h"
-#include "src/core/lib/gpr/env.h"
+#include "src/core/lib/config/config_vars.h"
+#include "src/core/lib/gprpp/env.h"
 #include "src/proto/grpc/testing/xds/v3/aggregate_cluster.grpc.pb.h"
 #include "src/proto/grpc/testing/xds/v3/cluster.grpc.pb.h"
-#include "test/cpp/end2end/connection_delay_injector.h"
+#include "test/cpp/end2end/connection_attempt_injector.h"
 #include "test/cpp/end2end/xds/xds_end2end_test_lib.h"
 
 namespace grpc {
@@ -37,7 +40,7 @@ namespace testing {
 namespace {
 
 using ::envoy::config::cluster::v3::CustomClusterType;
-using ::envoy::config::endpoint::v3::HealthStatus;
+using ::envoy::config::core::v3::HealthStatus;
 using ::envoy::extensions::clusters::aggregate::v3::ClusterConfig;
 
 class RingHashTest : public XdsEnd2endTest {
@@ -46,12 +49,17 @@ class RingHashTest : public XdsEnd2endTest {
     logical_dns_cluster_resolver_response_generator_ =
         grpc_core::MakeRefCounted<grpc_core::FakeResolverResponseGenerator>();
     InitClient();
-    ChannelArguments args;
-    args.SetPointerWithVtable(
+    SetUpChannel();
+  }
+
+  void SetUpChannel(ChannelArguments* args = nullptr) {
+    ChannelArguments local_args;
+    if (args == nullptr) args = &local_args;
+    args->SetPointerWithVtable(
         GRPC_ARG_XDS_LOGICAL_DNS_CLUSTER_FAKE_RESOLVER_RESPONSE_GENERATOR,
         logical_dns_cluster_resolver_response_generator_.get(),
         &grpc_core::FakeResolverResponseGenerator::kChannelArgPointerVtable);
-    ResetStub(/*failover_timeout_ms=*/0, &args);
+    ResetStub(/*failover_timeout_ms=*/0, args);
   }
 
   grpc_core::ServerAddressList CreateAddressListFromPortList(
@@ -63,7 +71,7 @@ class RingHashTest : public XdsEnd2endTest {
       GPR_ASSERT(lb_uri.ok());
       grpc_resolved_address address;
       GPR_ASSERT(grpc_parse_uri(*lb_uri, &address));
-      addresses.emplace_back(address.addr, address.len, nullptr);
+      addresses.emplace_back(address, grpc_core::ChannelArgs());
     }
     return addresses;
   }
@@ -133,7 +141,7 @@ TEST_P(RingHashTest, AggregateClusterFallBackFromRingHashAtStartup) {
                                    new_route_config);
   // Verifying that we are using ring hash as only 1 endpoint is receiving all
   // the traffic.
-  CheckRpcSendOk(DEBUG_LOCATION, 100);
+  CheckRpcSendOk(DEBUG_LOCATION, 100, RpcOptions().set_timeout_ms(5000));
   bool found = false;
   for (size_t i = 0; i < backends_.size(); ++i) {
     if (backends_[i]->backend_service()->request_count() > 0) {
@@ -206,12 +214,112 @@ TEST_P(RingHashTest,
         std::move(result));
   }
   // Inject connection delay to make this act more realistically.
-  ConnectionDelayInjector delay_injector(
-      grpc_core::Duration::Milliseconds(500) * grpc_test_slowdown_factor());
-  delay_injector.Start();
+  ConnectionAttemptInjector injector;
+  injector.SetDelay(grpc_core::Duration::Milliseconds(500) *
+                    grpc_test_slowdown_factor());
   // Send RPC.  Need the timeout to be long enough to account for the
   // subchannel connection delays.
   CheckRpcSendOk(DEBUG_LOCATION, 1, RpcOptions().set_timeout_ms(5000));
+}
+
+TEST_P(RingHashTest,
+       AggregateClusterFallBackFromRingHashToLogicalDnsAtStartupNoFailedRpcs) {
+  CreateAndStartBackends(1);
+  const char* kEdsClusterName = "eds_cluster";
+  const char* kLogicalDNSClusterName = "logical_dns_cluster";
+  // Populate EDS resource.
+  EdsResourceArgs args({
+      {"locality0",
+       {MakeNonExistantEndpoint(), MakeNonExistantEndpoint()},
+       kDefaultLocalityWeight,
+       0},
+      {"locality1",
+       {MakeNonExistantEndpoint(), MakeNonExistantEndpoint()},
+       kDefaultLocalityWeight,
+       1},
+  });
+  balancer_->ads_service()->SetEdsResource(BuildEdsResource(args));
+  // Populate new CDS resources.
+  Cluster eds_cluster = default_cluster_;
+  eds_cluster.set_name(kEdsClusterName);
+  balancer_->ads_service()->SetCdsResource(eds_cluster);
+  // Populate LOGICAL_DNS cluster.
+  auto logical_dns_cluster = default_cluster_;
+  logical_dns_cluster.set_name(kLogicalDNSClusterName);
+  logical_dns_cluster.set_type(Cluster::LOGICAL_DNS);
+  auto* address = logical_dns_cluster.mutable_load_assignment()
+                      ->add_endpoints()
+                      ->add_lb_endpoints()
+                      ->mutable_endpoint()
+                      ->mutable_address()
+                      ->mutable_socket_address();
+  address->set_address(kServerName);
+  address->set_port_value(443);
+  balancer_->ads_service()->SetCdsResource(logical_dns_cluster);
+  // Create Aggregate Cluster
+  auto cluster = default_cluster_;
+  cluster.set_lb_policy(Cluster::RING_HASH);
+  CustomClusterType* custom_cluster = cluster.mutable_cluster_type();
+  custom_cluster->set_name("envoy.clusters.aggregate");
+  ClusterConfig cluster_config;
+  cluster_config.add_clusters(kEdsClusterName);
+  cluster_config.add_clusters(kLogicalDNSClusterName);
+  custom_cluster->mutable_typed_config()->PackFrom(cluster_config);
+  balancer_->ads_service()->SetCdsResource(cluster);
+  // Set up route with channel id hashing
+  auto new_route_config = default_route_config_;
+  auto* route = new_route_config.mutable_virtual_hosts(0)->mutable_routes(0);
+  auto* hash_policy = route->mutable_route()->add_hash_policy();
+  hash_policy->mutable_filter_state()->set_key("io.grpc.channel_id");
+  SetListenerAndRouteConfiguration(balancer_.get(), default_listener_,
+                                   new_route_config);
+  // Set Logical DNS result
+  {
+    grpc_core::ExecCtx exec_ctx;
+    grpc_core::Resolver::Result result;
+    result.addresses = CreateAddressListFromPortList(GetBackendPorts());
+    logical_dns_cluster_resolver_response_generator_->SetResponse(
+        std::move(result));
+  }
+  // Set up connection attempt injector.
+  ConnectionAttemptInjector injector;
+  auto hold = injector.AddHold(backends_[0]->port());
+  // Increase subchannel backoff time, so that subchannels stay in
+  // TRANSIENT_FAILURE for long enough to trigger potential problems.
+  ChannelArguments channel_args;
+  channel_args.SetInt(GRPC_ARG_INITIAL_RECONNECT_BACKOFF_MS,
+                      10000 * grpc_test_slowdown_factor());
+  SetUpChannel(&channel_args);
+  // Start an RPC in the background.
+  LongRunningRpc rpc;
+  rpc.StartRpc(stub_.get(), RpcOptions().set_timeout_ms(5000));
+  // Wait for connection attempt to the backend.
+  hold->Wait();
+  // Channel should report CONNECTING here, and any RPC should be queued.
+  EXPECT_EQ(channel_->GetState(false), GRPC_CHANNEL_CONNECTING);
+  // Start a second RPC at this point, which should be queued as well.
+  // This will fail if the priority policy fails to update the picker to
+  // point to the LOGICAL_DNS child; if it leaves it pointing to the EDS
+  // priority 1, then the RPC will fail, because all subchannels are in
+  // TRANSIENT_FAILURE.
+  // Note that sending only the first RPC does not catch this case,
+  // because if the priority policy fails to update the picker, then the
+  // pick for the first RPC will not be retried.
+  LongRunningRpc rpc2;
+  rpc2.StartRpc(stub_.get(), RpcOptions().set_timeout_ms(5000));
+  // Allow the connection attempt to complete.
+  hold->Resume();
+  // Now the RPCs should complete successfully.
+  gpr_log(GPR_INFO, "=== WAITING FOR FIRST RPC TO FINISH ===");
+  Status status = rpc.GetStatus();
+  gpr_log(GPR_INFO, "=== FIRST RPC FINISHED ===");
+  EXPECT_TRUE(status.ok()) << "code=" << status.error_code()
+                           << " message=" << status.error_message();
+  gpr_log(GPR_INFO, "=== WAITING FOR SECOND RPC TO FINISH ===");
+  status = rpc2.GetStatus();
+  gpr_log(GPR_INFO, "=== SECOND RPC FINISHED ===");
+  EXPECT_TRUE(status.ok()) << "code=" << status.error_code()
+                           << " message=" << status.error_message();
 }
 
 // Tests that ring hash policy that hashes using channel id ensures all RPCs
@@ -229,7 +337,7 @@ TEST_P(RingHashTest, ChannelIdHashing) {
                                    new_route_config);
   EdsResourceArgs args({{"locality0", CreateEndpointsForBackends()}});
   balancer_->ads_service()->SetEdsResource(BuildEdsResource(args));
-  CheckRpcSendOk(DEBUG_LOCATION, 100);
+  CheckRpcSendOk(DEBUG_LOCATION, 100, RpcOptions().set_timeout_ms(5000));
   bool found = false;
   for (size_t i = 0; i < backends_.size(); ++i) {
     if (backends_[i]->backend_service()->request_count() > 0) {
@@ -268,10 +376,14 @@ TEST_P(RingHashTest, HeaderHashing) {
       {"address_hash", CreateMetadataValueThatHashesToBackend(2)}};
   std::vector<std::pair<std::string, std::string>> metadata3 = {
       {"address_hash", CreateMetadataValueThatHashesToBackend(3)}};
-  const auto rpc_options = RpcOptions().set_metadata(std::move(metadata));
-  const auto rpc_options1 = RpcOptions().set_metadata(std::move(metadata1));
-  const auto rpc_options2 = RpcOptions().set_metadata(std::move(metadata2));
-  const auto rpc_options3 = RpcOptions().set_metadata(std::move(metadata3));
+  const auto rpc_options =
+      RpcOptions().set_metadata(std::move(metadata)).set_timeout_ms(5000);
+  const auto rpc_options1 =
+      RpcOptions().set_metadata(std::move(metadata1)).set_timeout_ms(5000);
+  const auto rpc_options2 =
+      RpcOptions().set_metadata(std::move(metadata2)).set_timeout_ms(5000);
+  const auto rpc_options3 =
+      RpcOptions().set_metadata(std::move(metadata3)).set_timeout_ms(5000);
   WaitForBackend(DEBUG_LOCATION, 0, /*check_status=*/nullptr,
                  WaitForBackendOptions(), rpc_options);
   WaitForBackend(DEBUG_LOCATION, 1, /*check_status=*/nullptr,
@@ -318,10 +430,14 @@ TEST_P(RingHashTest, HeaderHashingWithRegexRewrite) {
       {"address_hash", CreateMetadataValueThatHashesToBackend(2)}};
   std::vector<std::pair<std::string, std::string>> metadata3 = {
       {"address_hash", CreateMetadataValueThatHashesToBackend(3)}};
-  const auto rpc_options = RpcOptions().set_metadata(std::move(metadata));
-  const auto rpc_options1 = RpcOptions().set_metadata(std::move(metadata1));
-  const auto rpc_options2 = RpcOptions().set_metadata(std::move(metadata2));
-  const auto rpc_options3 = RpcOptions().set_metadata(std::move(metadata3));
+  const auto rpc_options =
+      RpcOptions().set_metadata(std::move(metadata)).set_timeout_ms(5000);
+  const auto rpc_options1 =
+      RpcOptions().set_metadata(std::move(metadata1)).set_timeout_ms(5000);
+  const auto rpc_options2 =
+      RpcOptions().set_metadata(std::move(metadata2)).set_timeout_ms(5000);
+  const auto rpc_options3 =
+      RpcOptions().set_metadata(std::move(metadata3)).set_timeout_ms(5000);
   CheckRpcSendOk(DEBUG_LOCATION, 100, rpc_options);
   CheckRpcSendOk(DEBUG_LOCATION, 100, rpc_options1);
   CheckRpcSendOk(DEBUG_LOCATION, 100, rpc_options2);
@@ -357,7 +473,7 @@ TEST_P(RingHashTest, NoHashPolicy) {
   // TODO(donnadionne): remove extended timeout after ring creation
   // optimization.
   WaitForAllBackends(DEBUG_LOCATION, 0, 2, /*check_status=*/nullptr,
-                     WaitForBackendOptions(),
+                     WaitForBackendOptions().set_timeout_ms(kRpcTimeoutMs),
                      RpcOptions().set_timeout_ms(kRpcTimeoutMs));
   CheckRpcSendOk(DEBUG_LOCATION, kNumRpcs);
   const int request_count_1 = backends_[0]->backend_service()->request_count();
@@ -388,17 +504,15 @@ TEST_P(RingHashTest, EndpointWeights) {
   // Endpoint 2 has weight 2.
   EdsResourceArgs args(
       {{"locality0",
-        {CreateEndpoint(0, ::envoy::config::endpoint::v3::HealthStatus::UNKNOWN,
-                        0),
-         CreateEndpoint(1, ::envoy::config::endpoint::v3::HealthStatus::UNKNOWN,
-                        1),
-         CreateEndpoint(2, ::envoy::config::endpoint::v3::HealthStatus::UNKNOWN,
+        {CreateEndpoint(0, ::envoy::config::core::v3::HealthStatus::UNKNOWN, 0),
+         CreateEndpoint(1, ::envoy::config::core::v3::HealthStatus::UNKNOWN, 1),
+         CreateEndpoint(2, ::envoy::config::core::v3::HealthStatus::UNKNOWN,
                         2)}}});
   balancer_->ads_service()->SetEdsResource(BuildEdsResource(args));
   // TODO(donnadionne): remove extended timeout after ring creation
   // optimization.
   WaitForAllBackends(DEBUG_LOCATION, 0, 3, /*check_status=*/nullptr,
-                     WaitForBackendOptions(),
+                     WaitForBackendOptions().set_timeout_ms(kRpcTimeoutMs),
                      RpcOptions().set_timeout_ms(kRpcTimeoutMs));
   CheckRpcSendOk(DEBUG_LOCATION, kNumRpcs);
   // Endpoint 2 should see 50% of traffic, and endpoints 0 and 1 should
@@ -434,7 +548,8 @@ TEST_P(RingHashTest, ContinuesPastTerminalPolicyThatDoesNotProduceResult) {
   balancer_->ads_service()->SetEdsResource(BuildEdsResource(args));
   std::vector<std::pair<std::string, std::string>> metadata = {
       {"address_hash", CreateMetadataValueThatHashesToBackend(0)}};
-  const auto rpc_options = RpcOptions().set_metadata(std::move(metadata));
+  const auto rpc_options =
+      RpcOptions().set_metadata(std::move(metadata)).set_timeout_ms(5000);
   CheckRpcSendOk(DEBUG_LOCATION, 100, rpc_options);
   EXPECT_EQ(backends_[0]->backend_service()->request_count(), 100);
   EXPECT_EQ(backends_[1]->backend_service()->request_count(), 0);
@@ -470,7 +585,7 @@ TEST_P(RingHashTest, HashOnHeaderThatIsNotPresent) {
   // TODO(donnadionne): remove extended timeout after ring creation
   // optimization.
   WaitForAllBackends(DEBUG_LOCATION, 0, 2, /*check_status=*/nullptr,
-                     WaitForBackendOptions(),
+                     WaitForBackendOptions().set_timeout_ms(kRpcTimeoutMs),
                      RpcOptions().set_timeout_ms(kRpcTimeoutMs));
   CheckRpcSendOk(DEBUG_LOCATION, kNumRpcs, rpc_options);
   const int request_count_1 = backends_[0]->backend_service()->request_count();
@@ -513,7 +628,7 @@ TEST_P(RingHashTest, UnsupportedHashPolicyDefaultToRandomHashing) {
   // TODO(donnadionne): remove extended timeout after ring creation
   // optimization.
   WaitForAllBackends(DEBUG_LOCATION, 0, 2, /*check_status=*/nullptr,
-                     WaitForBackendOptions(),
+                     WaitForBackendOptions().set_timeout_ms(kRpcTimeoutMs),
                      RpcOptions().set_timeout_ms(kRpcTimeoutMs));
   CheckRpcSendOk(DEBUG_LOCATION, kNumRpcs);
   const int request_count_1 = backends_[0]->backend_service()->request_count();
@@ -550,7 +665,7 @@ TEST_P(RingHashTest, RandomHashingDistributionAccordingToEndpointWeight) {
   // TODO(donnadionne): remove extended timeout after ring creation
   // optimization.
   WaitForAllBackends(DEBUG_LOCATION, 0, 2, /*check_status=*/nullptr,
-                     WaitForBackendOptions(),
+                     WaitForBackendOptions().set_timeout_ms(kRpcTimeoutMs),
                      RpcOptions().set_timeout_ms(kRpcTimeoutMs));
   CheckRpcSendOk(DEBUG_LOCATION, kNumRpcs);
   const int weight_33_request_count =
@@ -590,7 +705,7 @@ TEST_P(RingHashTest,
   // TODO(donnadionne): remove extended timeout after ring creation
   // optimization.
   WaitForAllBackends(DEBUG_LOCATION, 0, 2, /*check_status=*/nullptr,
-                     WaitForBackendOptions(),
+                     WaitForBackendOptions().set_timeout_ms(kRpcTimeoutMs),
                      RpcOptions().set_timeout_ms(kRpcTimeoutMs));
   CheckRpcSendOk(DEBUG_LOCATION, kNumRpcs);
   const int weight_20_request_count =
@@ -626,7 +741,8 @@ TEST_P(RingHashTest, FixedHashingTerminalPolicy) {
       {"fixed_string", "fixed_value"},
       {"random_string", absl::StrFormat("%" PRIu32, rand())},
   };
-  const auto rpc_options = RpcOptions().set_metadata(std::move(metadata));
+  const auto rpc_options =
+      RpcOptions().set_metadata(std::move(metadata)).set_timeout_ms(5000);
   CheckRpcSendOk(DEBUG_LOCATION, 100, rpc_options);
   bool found = false;
   for (size_t i = 0; i < backends_.size(); ++i) {
@@ -657,7 +773,7 @@ TEST_P(RingHashTest, IdleToReady) {
   EdsResourceArgs args({{"locality0", CreateEndpointsForBackends()}});
   balancer_->ads_service()->SetEdsResource(BuildEdsResource(args));
   EXPECT_EQ(GRPC_CHANNEL_IDLE, channel_->GetState(false));
-  CheckRpcSendOk(DEBUG_LOCATION);
+  CheckRpcSendOk(DEBUG_LOCATION, 1, RpcOptions().set_timeout_ms(5000));
   EXPECT_EQ(GRPC_CHANNEL_READY, channel_->GetState(false));
 }
 
@@ -683,8 +799,7 @@ TEST_P(RingHashTest, ContinuesConnectingWithoutPicks) {
                                    new_route_config);
   // Start connection attempt injector and add a hold for the P0
   // connection attempt.
-  ConnectionHoldInjector injector;
-  injector.Start();
+  ConnectionAttemptInjector injector;
   auto hold = injector.AddHold(non_existant_endpoint.port);
   // A long-running RPC, just used to send the RPC in another thread.
   LongRunningRpc rpc;
@@ -729,8 +844,7 @@ TEST_P(RingHashTest, ContinuesConnectingWithoutPicksOneSubchannelAtATime) {
   SetListenerAndRouteConfiguration(balancer_.get(), default_listener_,
                                    new_route_config);
   // Start connection attempt injector.
-  ConnectionHoldInjector injector;
-  injector.Start();
+  ConnectionAttemptInjector injector;
   auto hold_non_existant0 = injector.AddHold(non_existant_endpoint0.port);
   auto hold_non_existant1 = injector.AddHold(non_existant_endpoint1.port);
   auto hold_non_existant2 = injector.AddHold(non_existant_endpoint2.port);
@@ -812,7 +926,8 @@ TEST_P(RingHashTest, TransientFailureCheckNextOne) {
   std::vector<std::pair<std::string, std::string>> metadata = {
       {"address_hash",
        CreateMetadataValueThatHashesToBackendPort(unused_port)}};
-  const auto rpc_options = RpcOptions().set_metadata(std::move(metadata));
+  const auto rpc_options =
+      RpcOptions().set_metadata(std::move(metadata)).set_timeout_ms(5000);
   WaitForBackend(DEBUG_LOCATION, 0, /*check_status=*/nullptr,
                  WaitForBackendOptions(), rpc_options);
   CheckRpcSendOk(DEBUG_LOCATION, 100, rpc_options);
@@ -841,7 +956,8 @@ TEST_P(RingHashTest, SwitchToLowerPrioirtyAndThenBack) {
   balancer_->ads_service()->SetEdsResource(BuildEdsResource(args));
   std::vector<std::pair<std::string, std::string>> metadata = {
       {"address_hash", CreateMetadataValueThatHashesToBackend(0)}};
-  const auto rpc_options = RpcOptions().set_metadata(std::move(metadata));
+  const auto rpc_options =
+      RpcOptions().set_metadata(std::move(metadata)).set_timeout_ms(5000);
   WaitForBackend(DEBUG_LOCATION, 0, /*check_status=*/nullptr,
                  WaitForBackendOptions(), rpc_options);
   backends_[0]->StopListeningAndSendGoaways();
@@ -878,9 +994,8 @@ TEST_P(RingHashTest, ReattemptWhenAllEndpointsUnreachable) {
   ShutdownBackend(0);
   CheckRpcSendFailure(
       DEBUG_LOCATION, StatusCode::UNAVAILABLE,
-      "ring hash cannot find a connected subchannel; first failure: "
-      "(UNKNOWN: Failed to connect to remote host: Connection refused|"
-      "UNAVAILABLE: Failed to connect to remote host: FD shutdown)",
+      MakeConnectionFailureRegex(
+          "ring hash cannot find a connected subchannel; first failure: "),
       RpcOptions().set_metadata(std::move(metadata)));
   StartBackend(0);
   // Ensure we are actively connecting without any traffic.
@@ -918,9 +1033,8 @@ TEST_P(RingHashTest, TransientFailureSkipToAvailableReady) {
   gpr_log(GPR_INFO, "=== SENDING FIRST RPC ===");
   CheckRpcSendFailure(
       DEBUG_LOCATION, StatusCode::UNAVAILABLE,
-      "ring hash cannot find a connected subchannel; first failure: "
-      "(UNKNOWN: Failed to connect to remote host: Connection refused|"
-      "UNAVAILABLE: Failed to connect to remote host: FD shutdown)",
+      MakeConnectionFailureRegex(
+          "ring hash cannot find a connected subchannel; first failure: "),
       rpc_options);
   gpr_log(GPR_INFO, "=== DONE WITH FIRST RPC ===");
   EXPECT_EQ(GRPC_CHANNEL_TRANSIENT_FAILURE, channel_->GetState(false));
@@ -955,9 +1069,8 @@ TEST_P(RingHashTest, TransientFailureSkipToAvailableReady) {
   gpr_log(GPR_INFO, "=== SENDING SECOND RPC ===");
   CheckRpcSendFailure(
       DEBUG_LOCATION, StatusCode::UNAVAILABLE,
-      "ring hash cannot find a connected subchannel; first failure: "
-      "(UNKNOWN: Failed to connect to remote host: Connection refused|"
-      "UNAVAILABLE: Failed to connect to remote host: FD shutdown)",
+      MakeConnectionFailureRegex(
+          "ring hash cannot find a connected subchannel; first failure: "),
       rpc_options);
   gpr_log(GPR_INFO, "=== STARTING BACKEND 1 ===");
   StartBackend(1);
@@ -991,10 +1104,9 @@ TEST_P(RingHashTest, ReattemptWhenGoingFromTransientFailureToIdle) {
   // Channel should fail RPCs and go into TRANSIENT_FAILURE.
   CheckRpcSendFailure(
       DEBUG_LOCATION, StatusCode::UNAVAILABLE,
-      // TODO(roth): As part of https://github.com/grpc/grpc/issues/22883,
-      // figure out how to get a useful resolution note plumbed down to
-      // improve this message.
-      "empty address list: ",
+      "empty address list: EDS resource eds_service_name contains empty "
+      "localities: \\[\\{region=\"xds_default_locality_region\", "
+      "zone=\"xds_default_locality_zone\", sub_zone=\"locality0\"\\}\\]",
       RpcOptions().set_timeout_ms(kConnectionTimeoutMilliseconds));
   EXPECT_EQ(GRPC_CHANNEL_TRANSIENT_FAILURE, channel_->GetState(false));
   // Send EDS update with 1 backend.
@@ -1031,7 +1143,7 @@ TEST_P(RingHashTest, UnsupportedHashPolicyUntilChannelIdHashing) {
                                    new_route_config);
   EdsResourceArgs args({{"locality0", CreateEndpointsForBackends()}});
   balancer_->ads_service()->SetEdsResource(BuildEdsResource(args));
-  CheckRpcSendOk(DEBUG_LOCATION, 100);
+  CheckRpcSendOk(DEBUG_LOCATION, 100, RpcOptions().set_timeout_ms(5000));
   bool found = false;
   for (size_t i = 0; i < backends_.size(); ++i) {
     if (backends_[i]->backend_service()->request_count() > 0) {
@@ -1044,101 +1156,6 @@ TEST_P(RingHashTest, UnsupportedHashPolicyUntilChannelIdHashing) {
   EXPECT_TRUE(found);
 }
 
-// Test we nack when ring hash policy has invalid hash function (something
-// other than XX_HASH.
-TEST_P(RingHashTest, InvalidHashFunction) {
-  CreateAndStartBackends(1);
-  auto cluster = default_cluster_;
-  cluster.set_lb_policy(Cluster::RING_HASH);
-  cluster.mutable_ring_hash_lb_config()->set_hash_function(
-      Cluster::RingHashLbConfig::MURMUR_HASH_2);
-  balancer_->ads_service()->SetCdsResource(cluster);
-  auto new_route_config = default_route_config_;
-  auto* route = new_route_config.mutable_virtual_hosts(0)->mutable_routes(0);
-  auto* hash_policy = route->mutable_route()->add_hash_policy();
-  hash_policy->mutable_filter_state()->set_key("io.grpc.channel_id");
-  SetListenerAndRouteConfiguration(balancer_.get(), default_listener_,
-                                   new_route_config);
-  EdsResourceArgs args({{"locality0", CreateEndpointsForBackends()}});
-  balancer_->ads_service()->SetEdsResource(BuildEdsResource(args));
-  const auto response_state = WaitForCdsNack(DEBUG_LOCATION);
-  ASSERT_TRUE(response_state.has_value()) << "timed out waiting for NACK";
-  EXPECT_THAT(
-      response_state->error_message,
-      ::testing::HasSubstr("ring hash lb config has invalid hash function."));
-}
-
-// Test we nack when ring hash policy has invalid ring size.
-TEST_P(RingHashTest, InvalidMinimumRingSize) {
-  CreateAndStartBackends(1);
-  auto cluster = default_cluster_;
-  cluster.set_lb_policy(Cluster::RING_HASH);
-  cluster.mutable_ring_hash_lb_config()->mutable_minimum_ring_size()->set_value(
-      0);
-  balancer_->ads_service()->SetCdsResource(cluster);
-  auto new_route_config = default_route_config_;
-  auto* route = new_route_config.mutable_virtual_hosts(0)->mutable_routes(0);
-  auto* hash_policy = route->mutable_route()->add_hash_policy();
-  hash_policy->mutable_filter_state()->set_key("io.grpc.channel_id");
-  SetListenerAndRouteConfiguration(balancer_.get(), default_listener_,
-                                   new_route_config);
-  EdsResourceArgs args({{"locality0", CreateEndpointsForBackends()}});
-  balancer_->ads_service()->SetEdsResource(BuildEdsResource(args));
-  const auto response_state = WaitForCdsNack(DEBUG_LOCATION);
-  ASSERT_TRUE(response_state.has_value()) << "timed out waiting for NACK";
-  EXPECT_THAT(response_state->error_message,
-              ::testing::HasSubstr(
-                  "min_ring_size is not in the range of 1 to 8388608."));
-}
-
-// Test we nack when ring hash policy has invalid ring size.
-TEST_P(RingHashTest, InvalidMaxmumRingSize) {
-  CreateAndStartBackends(1);
-  auto cluster = default_cluster_;
-  cluster.set_lb_policy(Cluster::RING_HASH);
-  cluster.mutable_ring_hash_lb_config()->mutable_maximum_ring_size()->set_value(
-      8388609);
-  balancer_->ads_service()->SetCdsResource(cluster);
-  auto new_route_config = default_route_config_;
-  auto* route = new_route_config.mutable_virtual_hosts(0)->mutable_routes(0);
-  auto* hash_policy = route->mutable_route()->add_hash_policy();
-  hash_policy->mutable_filter_state()->set_key("io.grpc.channel_id");
-  SetListenerAndRouteConfiguration(balancer_.get(), default_listener_,
-                                   new_route_config);
-  EdsResourceArgs args({{"locality0", CreateEndpointsForBackends()}});
-  balancer_->ads_service()->SetEdsResource(BuildEdsResource(args));
-  const auto response_state = WaitForCdsNack(DEBUG_LOCATION);
-  ASSERT_TRUE(response_state.has_value()) << "timed out waiting for NACK";
-  EXPECT_THAT(response_state->error_message,
-              ::testing::HasSubstr(
-                  "max_ring_size is not in the range of 1 to 8388608."));
-}
-
-// Test we nack when ring hash policy has invalid ring size.
-TEST_P(RingHashTest, InvalidRingSizeMinGreaterThanMax) {
-  CreateAndStartBackends(1);
-  auto cluster = default_cluster_;
-  cluster.set_lb_policy(Cluster::RING_HASH);
-  cluster.mutable_ring_hash_lb_config()->mutable_maximum_ring_size()->set_value(
-      5000);
-  cluster.mutable_ring_hash_lb_config()->mutable_minimum_ring_size()->set_value(
-      5001);
-  balancer_->ads_service()->SetCdsResource(cluster);
-  auto new_route_config = default_route_config_;
-  auto* route = new_route_config.mutable_virtual_hosts(0)->mutable_routes(0);
-  auto* hash_policy = route->mutable_route()->add_hash_policy();
-  hash_policy->mutable_filter_state()->set_key("io.grpc.channel_id");
-  SetListenerAndRouteConfiguration(balancer_.get(), default_listener_,
-                                   new_route_config);
-  EdsResourceArgs args({{"locality0", CreateEndpointsForBackends()}});
-  balancer_->ads_service()->SetEdsResource(BuildEdsResource(args));
-  const auto response_state = WaitForCdsNack(DEBUG_LOCATION);
-  ASSERT_TRUE(response_state.has_value()) << "timed out waiting for NACK";
-  EXPECT_THAT(response_state->error_message,
-              ::testing::HasSubstr(
-                  "min_ring_size cannot be greater than max_ring_size."));
-}
-
 }  // namespace
 }  // namespace testing
 }  // namespace grpc
@@ -1148,10 +1165,12 @@ int main(int argc, char** argv) {
   ::testing::InitGoogleTest(&argc, argv);
   // Make the backup poller poll very frequently in order to pick up
   // updates from all the subchannels's FDs.
-  GPR_GLOBAL_CONFIG_SET(grpc_client_channel_backup_poll_interval_ms, 1);
+  grpc_core::ConfigVars::Overrides overrides;
+  overrides.client_channel_backup_poll_interval_ms = 1;
+  grpc_core::ConfigVars::SetOverrides(overrides);
 #if TARGET_OS_IPHONE
   // Workaround Apple CFStream bug
-  gpr_setenv("grpc_cfstream", "0");
+  grpc_core::SetEnv("grpc_cfstream", "0");
 #endif
   grpc_init();
   grpc::testing::ConnectionAttemptInjector::Init();

@@ -48,22 +48,33 @@ class Lang(enum.Flag):
 
 @dataclass
 class TestConfig:
-    """Describes the config for the test suite."""
+    """Describes the config for the test suite.
+
+    TODO(sergiitk): rename to LangSpec and rename skips.py to lang.py.
+    """
     client_lang: Lang
     server_lang: Lang
     version: Optional[str]
 
     def version_gte(self, another: str) -> bool:
-        """Returns a bool for whether the version is >= another one.
+        """Returns a bool for whether this VERSION is >= then ANOTHER version.
 
-        A version is greater than or equal to another version means its version
-        number is greater than or equal to another version's number. Version
-        "master" is always considered latest.
-        E.g., master >= v1.41.x >= v1.40.x >= v1.9.x.
+        Special cases:
 
-        Unspecified version is treated as 'master', but isn't explicitly set.
+        1) Versions "master" or "dev" are always greater than ANOTHER:
+        - master > v1.999.x > v1.55.x
+        - dev > v1.999.x > v1.55.x
+        - dev == master
+
+        2) Versions "dev-VERSION" behave the same as the VERSION:
+        - dev-master > v1.999.x > v1.55.x
+        - dev-master == dev == master
+        - v1.55.x > dev-v1.54.x > v1.53.x
+        - dev-v1.54.x == v1.54.x
+
+        3) Unspecified version (self.version is None) is treated as "master".
         """
-        if self.version == 'master' or self.version is None:
+        if self.version in ('master', 'dev', 'dev-master', None):
             return True
         if another == 'master':
             return False
@@ -74,10 +85,13 @@ class TestConfig:
                 f"server_lang='{self.server_lang}', version={self.version!r})")
 
     @staticmethod
-    def _parse_version(s: str) -> pkg_version.Version:
-        if s.endswith(".x"):
-            s = s[:-2]
-        return pkg_version.Version(s)
+    def _parse_version(version: str) -> pkg_version.Version:
+        if version.startswith('dev-'):
+            # Treat "dev-VERSION" as "VERSION".
+            version = version[4:]
+        if version.endswith('.x'):
+            version = version[:-2]
+        return pkg_version.Version(version)
 
 
 def _get_lang(image_name: str) -> Lang:
@@ -85,8 +99,11 @@ def _get_lang(image_name: str) -> Lang:
         re.search(r'/(\w+)-(client|server):', image_name).group(1))
 
 
-def evaluate_test_config(check: Callable[[TestConfig], bool]) -> None:
-    """Evaluates the test config check against Abseil flags."""
+def evaluate_test_config(check: Callable[[TestConfig], bool]) -> TestConfig:
+    """Evaluates the test config check against Abseil flags.
+
+    TODO(sergiitk): split into parse_lang_spec and check_is_supported.
+    """
     # NOTE(lidiz) a manual skip mechanism is needed because absl/flags
     # cannot be used in the built-in test-skipping decorators. See the
     # official FAQs:
@@ -100,3 +117,4 @@ def evaluate_test_config(check: Callable[[TestConfig], bool]) -> None:
         raise unittest.SkipTest(f'Unsupported test config: {test_config}')
 
     logger.info('Detected language and version: %s', test_config)
+    return test_config

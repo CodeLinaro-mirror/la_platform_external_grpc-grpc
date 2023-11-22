@@ -16,23 +16,20 @@
 
 #include <grpc/support/port_platform.h>
 
+#include "src/core/ext/filters/client_channel/lb_policy/ring_hash/ring_hash.h"
+
 #include <inttypes.h>
 #include <stdlib.h>
 
 #include <algorithm>
-#include <atomic>
 #include <cmath>
-#include <map>
 #include <memory>
 #include <string>
-#include <type_traits>
 #include <utility>
 #include <vector>
 
 #include "absl/base/attributes.h"
-#include "absl/base/thread_annotations.h"
 #include "absl/container/inlined_vector.h"
-#include "absl/memory/memory.h"
 #include "absl/status/status.h"
 #include "absl/status/statusor.h"
 #include "absl/strings/numbers.h"
@@ -43,30 +40,29 @@
 #define XXH_INLINE_ALL
 #include "xxhash.h"
 
-#include <grpc/impl/codegen/connectivity_state.h>
-#include <grpc/impl/codegen/grpc_types.h>
+#include <grpc/grpc.h>
+#include <grpc/impl/connectivity_state.h>
 #include <grpc/support/log.h>
 
-#include "src/core/ext/filters/client_channel/client_channel.h"
-#include "src/core/ext/filters/client_channel/lb_policy.h"
+#include "src/core/ext/filters/client_channel/client_channel_internal.h"
 #include "src/core/ext/filters/client_channel/lb_policy/subchannel_list.h"
-#include "src/core/ext/filters/client_channel/lb_policy_factory.h"
-#include "src/core/ext/filters/client_channel/lb_policy_registry.h"
-#include "src/core/ext/filters/client_channel/subchannel_interface.h"
 #include "src/core/lib/address_utils/sockaddr_utils.h"
+#include "src/core/lib/channel/channel_args.h"
+#include "src/core/lib/config/core_configuration.h"
 #include "src/core/lib/debug/trace.h"
-#include "src/core/lib/gpr/string.h"
 #include "src/core/lib/gprpp/debug_location.h"
 #include "src/core/lib/gprpp/orphanable.h"
 #include "src/core/lib/gprpp/ref_counted.h"
 #include "src/core/lib/gprpp/ref_counted_ptr.h"
-#include "src/core/lib/gprpp/sync.h"
 #include "src/core/lib/gprpp/unique_type_name.h"
+#include "src/core/lib/gprpp/work_serializer.h"
 #include "src/core/lib/iomgr/closure.h"
 #include "src/core/lib/iomgr/error.h"
 #include "src/core/lib/iomgr/exec_ctx.h"
-#include "src/core/lib/iomgr/work_serializer.h"
 #include "src/core/lib/json/json.h"
+#include "src/core/lib/load_balancing/lb_policy.h"
+#include "src/core/lib/load_balancing/lb_policy_factory.h"
+#include "src/core/lib/load_balancing/subchannel_interface.h"
 #include "src/core/lib/resolver/server_address.h"
 #include "src/core/lib/transport/connectivity_state.h"
 
@@ -74,62 +70,52 @@ namespace grpc_core {
 
 TraceFlag grpc_lb_ring_hash_trace(false, "ring_hash_lb");
 
-UniqueTypeName RequestHashAttributeName() {
+UniqueTypeName RequestHashAttribute::TypeName() {
   static UniqueTypeName::Factory kFactory("request_hash");
   return kFactory.Create();
 }
 
 // Helper Parser method
-void ParseRingHashLbConfig(const Json& json, size_t* min_ring_size,
-                           size_t* max_ring_size,
-                           std::vector<grpc_error_handle>* error_list) {
-  *min_ring_size = 1024;
-  *max_ring_size = 8388608;
-  if (json.type() != Json::Type::OBJECT) {
-    error_list->push_back(GRPC_ERROR_CREATE_FROM_STATIC_STRING(
-        "ring_hash_experimental should be of type object"));
-    return;
-  }
-  const Json::Object& ring_hash = json.object_value();
-  auto ring_hash_it = ring_hash.find("min_ring_size");
-  if (ring_hash_it != ring_hash.end()) {
-    if (ring_hash_it->second.type() != Json::Type::NUMBER) {
-      error_list->push_back(GRPC_ERROR_CREATE_FROM_STATIC_STRING(
-          "field:min_ring_size error: should be of type number"));
-    } else {
-      *min_ring_size = gpr_parse_nonnegative_int(
-          ring_hash_it->second.string_value().c_str());
+
+const JsonLoaderInterface* RingHashConfig::JsonLoader(const JsonArgs&) {
+  static const auto* loader =
+      JsonObjectLoader<RingHashConfig>()
+          .OptionalField("minRingSize", &RingHashConfig::min_ring_size)
+          .OptionalField("maxRingSize", &RingHashConfig::max_ring_size)
+          .Finish();
+  return loader;
+}
+
+void RingHashConfig::JsonPostLoad(const Json&, const JsonArgs&,
+                                  ValidationErrors* errors) {
+  {
+    ValidationErrors::ScopedField field(errors, ".minRingSize");
+    if (!errors->FieldHasErrors() &&
+        (min_ring_size == 0 || min_ring_size > 8388608)) {
+      errors->AddError("must be in the range [1, 8388608]");
     }
   }
-  ring_hash_it = ring_hash.find("max_ring_size");
-  if (ring_hash_it != ring_hash.end()) {
-    if (ring_hash_it->second.type() != Json::Type::NUMBER) {
-      error_list->push_back(GRPC_ERROR_CREATE_FROM_STATIC_STRING(
-          "field:max_ring_size error: should be of type number"));
-    } else {
-      *max_ring_size = gpr_parse_nonnegative_int(
-          ring_hash_it->second.string_value().c_str());
+  {
+    ValidationErrors::ScopedField field(errors, ".maxRingSize");
+    if (!errors->FieldHasErrors() &&
+        (max_ring_size == 0 || max_ring_size > 8388608)) {
+      errors->AddError("must be in the range [1, 8388608]");
     }
   }
-  if (*min_ring_size == 0 || *min_ring_size > 8388608 || *max_ring_size == 0 ||
-      *max_ring_size > 8388608 || *min_ring_size > *max_ring_size) {
-    error_list->push_back(GRPC_ERROR_CREATE_FROM_STATIC_STRING(
-        "field:max_ring_size and or min_ring_size error: "
-        "values need to be in the range of 1 to 8388608 "
-        "and max_ring_size cannot be smaller than "
-        "min_ring_size"));
+  if (min_ring_size > max_ring_size) {
+    errors->AddError("max_ring_size cannot be smaller than min_ring_size");
   }
 }
 
 namespace {
 
-constexpr char kRingHash[] = "ring_hash_experimental";
+constexpr absl::string_view kRingHash = "ring_hash_experimental";
 
 class RingHashLbConfig : public LoadBalancingPolicy::Config {
  public:
   RingHashLbConfig(size_t min_ring_size, size_t max_ring_size)
       : min_ring_size_(min_ring_size), max_ring_size_(max_ring_size) {}
-  const char* name() const override { return kRingHash; }
+  absl::string_view name() const override { return kRingHash; }
   size_t min_ring_size() const { return min_ring_size_; }
   size_t max_ring_size() const { return max_ring_size_; }
 
@@ -142,21 +128,20 @@ class RingHashLbConfig : public LoadBalancingPolicy::Config {
 // ring_hash LB policy
 //
 
+constexpr size_t kRingSizeCapDefault = 4096;
+
 class RingHash : public LoadBalancingPolicy {
  public:
   explicit RingHash(Args args);
 
-  const char* name() const override { return kRingHash; }
+  absl::string_view name() const override { return kRingHash; }
 
-  void UpdateLocked(UpdateArgs args) override;
+  absl::Status UpdateLocked(UpdateArgs args) override;
   void ResetBackoffLocked() override;
 
  private:
-  ~RingHash() override;
-
-  // Forward declarations.
+  // Forward declaration.
   class RingHashSubchannelList;
-  class Ring;
 
   // Data for a particular subchannel in a subchannel list.
   // This subclass adds the following functionality:
@@ -175,13 +160,11 @@ class RingHash : public LoadBalancingPolicy {
 
     const ServerAddress& address() const { return address_; }
 
-    grpc_connectivity_state GetConnectivityState() const {
-      return connectivity_state_.load(std::memory_order_relaxed);
+    grpc_connectivity_state logical_connectivity_state() const {
+      return logical_connectivity_state_;
     }
-
-    absl::Status GetConnectivityStatus() const {
-      MutexLock lock(&mu_);
-      return connectivity_status_;
+    const absl::Status& logical_connectivity_status() const {
+      return logical_connectivity_status_;
     }
 
    private:
@@ -198,38 +181,39 @@ class RingHash : public LoadBalancingPolicy {
     // subchannel in some cases; for example, once this is set to
     // TRANSIENT_FAILURE, we do not change it again until we get READY,
     // so we skip any interim stops in CONNECTING.
-    // Uses an atomic so that it can be accessed outside of the WorkSerializer.
-    std::atomic<grpc_connectivity_state> connectivity_state_{GRPC_CHANNEL_IDLE};
-
-    mutable Mutex mu_;
-    absl::Status connectivity_status_ ABSL_GUARDED_BY(&mu_);
+    grpc_connectivity_state logical_connectivity_state_ = GRPC_CHANNEL_IDLE;
+    absl::Status logical_connectivity_status_;
   };
 
-  // A list of subchannels.
+  // A list of subchannels and the ring containing those subchannels.
   class RingHashSubchannelList
       : public SubchannelList<RingHashSubchannelList, RingHashSubchannelData> {
    public:
+    class Ring : public RefCounted<Ring> {
+     public:
+      struct RingEntry {
+        uint64_t hash;
+        size_t subchannel_index;
+      };
+
+      Ring(RingHashLbConfig* config, RingHashSubchannelList* subchannel_list,
+           const ChannelArgs& args);
+
+      const std::vector<RingEntry>& ring() const { return ring_; }
+
+     private:
+      std::vector<RingEntry> ring_;
+    };
+
     RingHashSubchannelList(RingHash* policy, ServerAddressList addresses,
-                           const grpc_channel_args& args)
-        : SubchannelList(policy,
-                         (GRPC_TRACE_FLAG_ENABLED(grpc_lb_ring_hash_trace)
-                              ? "RingHashSubchannelList"
-                              : nullptr),
-                         std::move(addresses), policy->channel_control_helper(),
-                         args),
-          num_idle_(num_subchannels()),
-          ring_(MakeRefCounted<Ring>(policy, Ref(DEBUG_LOCATION, "Ring"))) {
-      // Need to maintain a ref to the LB policy as long as we maintain
-      // any references to subchannels, since the subchannels'
-      // pollset_sets will include the LB policy's pollset_set.
-      policy->Ref(DEBUG_LOCATION, "subchannel_list").release();
-    }
+                           const ChannelArgs& args);
 
     ~RingHashSubchannelList() override {
-      ring_.reset(DEBUG_LOCATION, "~RingHashSubchannelList");
       RingHash* p = static_cast<RingHash*>(policy());
       p->Unref(DEBUG_LOCATION, "subchannel_list");
     }
+
+    RefCountedPtr<Ring> ring() { return ring_; }
 
     // Updates the counters of subchannels in each state when a
     // subchannel transitions from old_state to new_state.
@@ -248,16 +232,8 @@ class RingHash : public LoadBalancingPolicy {
                                                absl::Status status);
 
    private:
-    bool AllSubchannelsSeenInitialState() {
-      for (size_t i = 0; i < num_subchannels(); ++i) {
-        if (!subchannel(i)->connectivity_state().has_value()) return false;
-      }
-      return true;
-    }
-
-    void ShutdownLocked() override {
-      ring_.reset(DEBUG_LOCATION, "RingHashSubchannelList::ShutdownLocked()");
-      SubchannelList::ShutdownLocked();
+    std::shared_ptr<WorkSerializer> work_serializer() const override {
+      return static_cast<RingHash*>(policy())->work_serializer();
     }
 
     size_t num_idle_;
@@ -278,27 +254,22 @@ class RingHash : public LoadBalancingPolicy {
     absl::Status last_failure_;
   };
 
-  class Ring : public RefCounted<Ring> {
-   public:
-    struct Entry {
-      uint64_t hash;
-      RingHashSubchannelData* subchannel;
-    };
-
-    Ring(RingHash* parent,
-         RefCountedPtr<RingHashSubchannelList> subchannel_list);
-
-    const std::vector<Entry>& ring() const { return ring_; }
-
-   private:
-    RefCountedPtr<RingHashSubchannelList> subchannel_list_;
-    std::vector<Entry> ring_;
-  };
-
   class Picker : public SubchannelPicker {
    public:
-    Picker(RefCountedPtr<RingHash> parent, RefCountedPtr<Ring> ring)
-        : parent_(std::move(parent)), ring_(std::move(ring)) {}
+    Picker(RefCountedPtr<RingHash> ring_hash_lb,
+           RingHashSubchannelList* subchannel_list)
+        : ring_hash_lb_(std::move(ring_hash_lb)),
+          ring_(subchannel_list->ring()) {
+      subchannels_.reserve(subchannel_list->num_subchannels());
+      for (size_t i = 0; i < subchannel_list->num_subchannels(); ++i) {
+        RingHashSubchannelData* subchannel_data =
+            subchannel_list->subchannel(i);
+        subchannels_.emplace_back(
+            SubchannelInfo{subchannel_data->subchannel()->Ref(),
+                           subchannel_data->logical_connectivity_state(),
+                           subchannel_data->logical_connectivity_status()});
+      }
+    }
 
     PickResult Pick(PickArgs args) override;
 
@@ -313,14 +284,14 @@ class RingHash : public LoadBalancingPolicy {
         GRPC_CLOSURE_INIT(&closure_, RunInExecCtx, this, nullptr);
       }
 
-      void AddSubchannel(RefCountedPtr<SubchannelInterface> subchannel) {
-        subchannels_.push_back(std::move(subchannel));
-      }
-
       void Orphan() override {
         // Hop into ExecCtx, so that we're not holding the data plane mutex
         // while we run control-plane code.
-        ExecCtx::Run(DEBUG_LOCATION, &closure_, GRPC_ERROR_NONE);
+        ExecCtx::Run(DEBUG_LOCATION, &closure_, absl::OkStatus());
+      }
+
+      void AddSubchannel(RefCountedPtr<SubchannelInterface> subchannel) {
+        subchannels_.push_back(std::move(subchannel));
       }
 
      private:
@@ -343,9 +314,18 @@ class RingHash : public LoadBalancingPolicy {
       std::vector<RefCountedPtr<SubchannelInterface>> subchannels_;
     };
 
-    RefCountedPtr<RingHash> parent_;
-    RefCountedPtr<Ring> ring_;
+    struct SubchannelInfo {
+      RefCountedPtr<SubchannelInterface> subchannel;
+      grpc_connectivity_state state;
+      absl::Status status;
+    };
+
+    RefCountedPtr<RingHash> ring_hash_lb_;
+    RefCountedPtr<RingHashSubchannelList::Ring> ring_;
+    std::vector<SubchannelInfo> subchannels_;
   };
+
+  ~RingHash() override;
 
   void ShutdownLocked() override;
 
@@ -353,20 +333,130 @@ class RingHash : public LoadBalancingPolicy {
   RefCountedPtr<RingHashLbConfig> config_;
 
   // list of subchannels.
-  OrphanablePtr<RingHashSubchannelList> subchannel_list_;
-  OrphanablePtr<RingHashSubchannelList> latest_pending_subchannel_list_;
+  RefCountedPtr<RingHashSubchannelList> subchannel_list_;
+  RefCountedPtr<RingHashSubchannelList> latest_pending_subchannel_list_;
   // indicating if we are shutting down.
   bool shutdown_ = false;
 };
 
 //
-// RingHash::Ring
+// RingHash::Picker
 //
 
-RingHash::Ring::Ring(RingHash* parent,
-                     RefCountedPtr<RingHashSubchannelList> subchannel_list)
-    : subchannel_list_(std::move(subchannel_list)) {
-  size_t num_subchannels = subchannel_list_->num_subchannels();
+RingHash::PickResult RingHash::Picker::Pick(PickArgs args) {
+  auto* call_state = static_cast<ClientChannelLbCallState*>(args.call_state);
+  auto* hash_attribute = static_cast<RequestHashAttribute*>(
+      call_state->GetCallAttribute(RequestHashAttribute::TypeName()));
+  absl::string_view hash;
+  if (hash_attribute != nullptr) {
+    hash = hash_attribute->request_hash();
+  }
+  uint64_t h;
+  if (!absl::SimpleAtoi(hash, &h)) {
+    return PickResult::Fail(
+        absl::InternalError("ring hash value is not a number"));
+  }
+  const auto& ring = ring_->ring();
+  // Ported from https://github.com/RJ/ketama/blob/master/libketama/ketama.c
+  // (ketama_get_server) NOTE: The algorithm depends on using signed integers
+  // for lowp, highp, and first_index. Do not change them!
+  int64_t lowp = 0;
+  int64_t highp = ring.size();
+  int64_t first_index = 0;
+  while (true) {
+    first_index = (lowp + highp) / 2;
+    if (first_index == static_cast<int64_t>(ring.size())) {
+      first_index = 0;
+      break;
+    }
+    uint64_t midval = ring[first_index].hash;
+    uint64_t midval1 = first_index == 0 ? 0 : ring[first_index - 1].hash;
+    if (h <= midval && h > midval1) {
+      break;
+    }
+    if (midval < h) {
+      lowp = first_index + 1;
+    } else {
+      highp = first_index - 1;
+    }
+    if (lowp > highp) {
+      first_index = 0;
+      break;
+    }
+  }
+  OrphanablePtr<SubchannelConnectionAttempter> subchannel_connection_attempter;
+  auto ScheduleSubchannelConnectionAttempt =
+      [&](RefCountedPtr<SubchannelInterface> subchannel) {
+        if (subchannel_connection_attempter == nullptr) {
+          subchannel_connection_attempter =
+              MakeOrphanable<SubchannelConnectionAttempter>(ring_hash_lb_->Ref(
+                  DEBUG_LOCATION, "SubchannelConnectionAttempter"));
+        }
+        subchannel_connection_attempter->AddSubchannel(std::move(subchannel));
+      };
+  SubchannelInfo& first_subchannel =
+      subchannels_[ring[first_index].subchannel_index];
+  switch (first_subchannel.state) {
+    case GRPC_CHANNEL_READY:
+      return PickResult::Complete(first_subchannel.subchannel);
+    case GRPC_CHANNEL_IDLE:
+      ScheduleSubchannelConnectionAttempt(first_subchannel.subchannel);
+      ABSL_FALLTHROUGH_INTENDED;
+    case GRPC_CHANNEL_CONNECTING:
+      return PickResult::Queue();
+    default:  // GRPC_CHANNEL_TRANSIENT_FAILURE
+      break;
+  }
+  ScheduleSubchannelConnectionAttempt(first_subchannel.subchannel);
+  // Loop through remaining subchannels to find one in READY.
+  // On the way, we make sure the right set of connection attempts
+  // will happen.
+  bool found_second_subchannel = false;
+  bool found_first_non_failed = false;
+  for (size_t i = 1; i < ring.size(); ++i) {
+    const auto& entry = ring[(first_index + i) % ring.size()];
+    if (entry.subchannel_index == ring[first_index].subchannel_index) {
+      continue;
+    }
+    SubchannelInfo& subchannel_info = subchannels_[entry.subchannel_index];
+    if (subchannel_info.state == GRPC_CHANNEL_READY) {
+      return PickResult::Complete(subchannel_info.subchannel);
+    }
+    if (!found_second_subchannel) {
+      switch (subchannel_info.state) {
+        case GRPC_CHANNEL_IDLE:
+          ScheduleSubchannelConnectionAttempt(subchannel_info.subchannel);
+          ABSL_FALLTHROUGH_INTENDED;
+        case GRPC_CHANNEL_CONNECTING:
+          return PickResult::Queue();
+        default:
+          break;
+      }
+      found_second_subchannel = true;
+    }
+    if (!found_first_non_failed) {
+      if (subchannel_info.state == GRPC_CHANNEL_TRANSIENT_FAILURE) {
+        ScheduleSubchannelConnectionAttempt(subchannel_info.subchannel);
+      } else {
+        if (subchannel_info.state == GRPC_CHANNEL_IDLE) {
+          ScheduleSubchannelConnectionAttempt(subchannel_info.subchannel);
+        }
+        found_first_non_failed = true;
+      }
+    }
+  }
+  return PickResult::Fail(absl::UnavailableError(absl::StrCat(
+      "ring hash cannot find a connected subchannel; first failure: ",
+      first_subchannel.status.ToString())));
+}
+
+//
+// RingHash::RingHashSubchannelList::Ring
+//
+
+RingHash::RingHashSubchannelList::Ring::Ring(
+    RingHashLbConfig* config, RingHashSubchannelList* subchannel_list,
+    const ChannelArgs& args) {
   // Store the weights while finding the sum.
   struct AddressWeight {
     std::string address;
@@ -377,9 +467,9 @@ RingHash::Ring::Ring(RingHash* parent,
   };
   std::vector<AddressWeight> address_weights;
   size_t sum = 0;
-  address_weights.reserve(num_subchannels);
-  for (size_t i = 0; i < num_subchannels; ++i) {
-    RingHashSubchannelData* sd = subchannel_list_->subchannel(i);
+  address_weights.reserve(subchannel_list->num_subchannels());
+  for (size_t i = 0; i < subchannel_list->num_subchannels(); ++i) {
+    RingHashSubchannelData* sd = subchannel_list->subchannel(i);
     const ServerAddressWeightAttribute* weight_attribute = static_cast<
         const ServerAddressWeightAttribute*>(sd->address().GetAttribute(
         ServerAddressWeightAttribute::kServerAddressWeightAttributeKey));
@@ -411,13 +501,15 @@ RingHash::Ring::Ring(RingHash* parent,
   // weights aren't provided, all hosts should get an equal number of hashes. In
   // the case where this number exceeds the max_ring_size, it's scaled back down
   // to fit.
-  const size_t min_ring_size = parent->config_->min_ring_size();
-  const size_t max_ring_size = parent->config_->max_ring_size();
+  const size_t ring_size_cap = args.GetInt(GRPC_ARG_RING_HASH_LB_RING_SIZE_CAP)
+                                   .value_or(kRingSizeCapDefault);
+  const size_t min_ring_size = std::min(config->min_ring_size(), ring_size_cap);
+  const size_t max_ring_size = std::min(config->max_ring_size(), ring_size_cap);
   const double scale = std::min(
       std::ceil(min_normalized_weight * min_ring_size) / min_normalized_weight,
       static_cast<double>(max_ring_size));
   // Reserve memory for the entire ring up front.
-  const size_t ring_size = std::ceil(scale);
+  const uint64_t ring_size = std::ceil(scale);
   ring_.reserve(ring_size);
   // Populate the hash ring by walking through the (host, weight) pairs in
   // normalized_host_weights, and generating (scale * weight) hashes for each
@@ -429,7 +521,7 @@ RingHash::Ring::Ring(RingHash* parent,
   double target_hashes = 0.0;
   uint64_t min_hashes_per_host = ring_size;
   uint64_t max_hashes_per_host = 0;
-  for (size_t i = 0; i < num_subchannels; ++i) {
+  for (size_t i = 0; i < subchannel_list->num_subchannels(); ++i) {
     const std::string& address_string = address_weights[i].address;
     hash_key_buffer.assign(address_string.begin(), address_string.end());
     hash_key_buffer.emplace_back('_');
@@ -442,7 +534,7 @@ RingHash::Ring::Ring(RingHash* parent,
       absl::string_view hash_key(hash_key_buffer.data(),
                                  hash_key_buffer.size());
       const uint64_t hash = XXH64(hash_key.data(), hash_key.size(), 0);
-      ring_.push_back({hash, subchannel_list_->subchannel(i)});
+      ring_.push_back({hash, i});
       ++count;
       ++current_hashes;
       hash_key_buffer.erase(offset_start, hash_key_buffer.end());
@@ -453,131 +545,36 @@ RingHash::Ring::Ring(RingHash* parent,
         std::max(static_cast<uint64_t>(i), max_hashes_per_host);
   }
   std::sort(ring_.begin(), ring_.end(),
-            [](const Entry& lhs, const Entry& rhs) -> bool {
+            [](const RingEntry& lhs, const RingEntry& rhs) -> bool {
               return lhs.hash < rhs.hash;
             });
-  if (GRPC_TRACE_FLAG_ENABLED(grpc_lb_ring_hash_trace)) {
-    gpr_log(GPR_INFO,
-            "[RH %p picker %p] created ring from subchannel_list=%p "
-            "with %" PRIuPTR " ring entries",
-            parent, this, subchannel_list_.get(), ring_.size());
-  }
-}
-
-//
-// RingHash::Picker
-//
-
-RingHash::PickResult RingHash::Picker::Pick(PickArgs args) {
-  auto* call_state = static_cast<ClientChannel::LoadBalancedCall::LbCallState*>(
-      args.call_state);
-  auto hash = call_state->GetCallAttribute(RequestHashAttributeName());
-  uint64_t h;
-  if (!absl::SimpleAtoi(hash, &h)) {
-    return PickResult::Fail(
-        absl::InternalError("ring hash value is not a number"));
-  }
-  const std::vector<Ring::Entry>& ring = ring_->ring();
-  // Ported from https://github.com/RJ/ketama/blob/master/libketama/ketama.c
-  // (ketama_get_server) NOTE: The algorithm depends on using signed integers
-  // for lowp, highp, and first_index. Do not change them!
-  size_t lowp = 0;
-  size_t highp = ring.size();
-  size_t first_index = 0;
-  while (true) {
-    first_index = (lowp + highp) / 2;
-    if (first_index == ring.size()) {
-      first_index = 0;
-      break;
-    }
-    uint64_t midval = ring[first_index].hash;
-    uint64_t midval1 = first_index == 0 ? 0 : ring[first_index - 1].hash;
-    if (h <= midval && h > midval1) {
-      break;
-    }
-    if (midval < h) {
-      lowp = first_index + 1;
-    } else {
-      highp = first_index - 1;
-    }
-    if (lowp > highp) {
-      first_index = 0;
-      break;
-    }
-  }
-  OrphanablePtr<SubchannelConnectionAttempter> subchannel_connection_attempter;
-  auto ScheduleSubchannelConnectionAttempt =
-      [&](RefCountedPtr<SubchannelInterface> subchannel) {
-        if (subchannel_connection_attempter == nullptr) {
-          subchannel_connection_attempter =
-              MakeOrphanable<SubchannelConnectionAttempter>(parent_);
-        }
-        subchannel_connection_attempter->AddSubchannel(std::move(subchannel));
-      };
-  switch (ring[first_index].subchannel->GetConnectivityState()) {
-    case GRPC_CHANNEL_READY:
-      return PickResult::Complete(
-          ring[first_index].subchannel->subchannel()->Ref());
-    case GRPC_CHANNEL_IDLE:
-      ScheduleSubchannelConnectionAttempt(
-          ring[first_index].subchannel->subchannel()->Ref());
-      ABSL_FALLTHROUGH_INTENDED;
-    case GRPC_CHANNEL_CONNECTING:
-      return PickResult::Queue();
-    default:  // GRPC_CHANNEL_TRANSIENT_FAILURE
-      break;
-  }
-  ScheduleSubchannelConnectionAttempt(
-      ring[first_index].subchannel->subchannel()->Ref());
-  // Loop through remaining subchannels to find one in READY.
-  // On the way, we make sure the right set of connection attempts
-  // will happen.
-  bool found_second_subchannel = false;
-  bool found_first_non_failed = false;
-  for (size_t i = 1; i < ring.size(); ++i) {
-    const Ring::Entry& entry = ring[(first_index + i) % ring.size()];
-    if (entry.subchannel == ring[first_index].subchannel) {
-      continue;
-    }
-    grpc_connectivity_state connectivity_state =
-        entry.subchannel->GetConnectivityState();
-    if (connectivity_state == GRPC_CHANNEL_READY) {
-      return PickResult::Complete(entry.subchannel->subchannel()->Ref());
-    }
-    if (!found_second_subchannel) {
-      switch (connectivity_state) {
-        case GRPC_CHANNEL_IDLE:
-          ScheduleSubchannelConnectionAttempt(
-              entry.subchannel->subchannel()->Ref());
-          ABSL_FALLTHROUGH_INTENDED;
-        case GRPC_CHANNEL_CONNECTING:
-          return PickResult::Queue();
-        default:
-          break;
-      }
-      found_second_subchannel = true;
-    }
-    if (!found_first_non_failed) {
-      if (connectivity_state == GRPC_CHANNEL_TRANSIENT_FAILURE) {
-        ScheduleSubchannelConnectionAttempt(
-            entry.subchannel->subchannel()->Ref());
-      } else {
-        if (connectivity_state == GRPC_CHANNEL_IDLE) {
-          ScheduleSubchannelConnectionAttempt(
-              entry.subchannel->subchannel()->Ref());
-        }
-        found_first_non_failed = true;
-      }
-    }
-  }
-  return PickResult::Fail(absl::UnavailableError(absl::StrCat(
-      "ring hash cannot find a connected subchannel; first failure: ",
-      ring[first_index].subchannel->GetConnectivityStatus().ToString())));
 }
 
 //
 // RingHash::RingHashSubchannelList
 //
+
+RingHash::RingHashSubchannelList::RingHashSubchannelList(
+    RingHash* policy, ServerAddressList addresses, const ChannelArgs& args)
+    : SubchannelList(policy,
+                     (GRPC_TRACE_FLAG_ENABLED(grpc_lb_ring_hash_trace)
+                          ? "RingHashSubchannelList"
+                          : nullptr),
+                     std::move(addresses), policy->channel_control_helper(),
+                     args),
+      num_idle_(num_subchannels()) {
+  // Need to maintain a ref to the LB policy as long as we maintain
+  // any references to subchannels, since the subchannels'
+  // pollset_sets will include the LB policy's pollset_set.
+  policy->Ref(DEBUG_LOCATION, "subchannel_list").release();
+  // Construct the ring.
+  ring_ = MakeRefCounted<Ring>(policy->config_.get(), this, args);
+  if (GRPC_TRACE_FLAG_ENABLED(grpc_lb_ring_hash_trace)) {
+    gpr_log(GPR_INFO,
+            "[RH %p] created subchannel list %p with %" PRIuPTR " ring entries",
+            policy, this, ring_->ring().size());
+  }
+}
 
 void RingHash::RingHashSubchannelList::UpdateStateCountersLocked(
     grpc_connectivity_state old_state, grpc_connectivity_state new_state) {
@@ -667,8 +664,7 @@ void RingHash::RingHashSubchannelList::UpdateRingHashConnectivityStateLocked(
   // Note that we use our own picker regardless of connectivity state.
   p->channel_control_helper()->UpdateState(
       state, status,
-      absl::make_unique<Picker>(p->Ref(DEBUG_LOCATION, "RingHashPicker"),
-                                ring_));
+      MakeRefCounted<Picker>(p->Ref(DEBUG_LOCATION, "RingHashPicker"), this));
   // While the ring_hash policy is reporting TRANSIENT_FAILURE, it will
   // not be getting any pick requests from the priority policy.
   // However, because the ring_hash policy does not attempt to
@@ -715,7 +711,6 @@ void RingHash::RingHashSubchannelData::ProcessConnectivityChangeLocked(
     absl::optional<grpc_connectivity_state> old_state,
     grpc_connectivity_state new_state) {
   RingHash* p = static_cast<RingHash*>(subchannel_list()->policy());
-  grpc_connectivity_state last_connectivity_state = GetConnectivityState();
   if (GRPC_TRACE_FLAG_ENABLED(grpc_lb_ring_hash_trace)) {
     gpr_log(
         GPR_INFO,
@@ -723,7 +718,7 @@ void RingHash::RingHashSubchannelData::ProcessConnectivityChangeLocked(
         "(index %" PRIuPTR " of %" PRIuPTR "): prev_state=%s new_state=%s",
         p, subchannel(), subchannel_list(), Index(),
         subchannel_list()->num_subchannels(),
-        ConnectivityStateName(last_connectivity_state),
+        ConnectivityStateName(logical_connectivity_state_),
         ConnectivityStateName(new_state));
   }
   GPR_ASSERT(subchannel() != nullptr);
@@ -743,34 +738,23 @@ void RingHash::RingHashSubchannelData::ProcessConnectivityChangeLocked(
   const bool connection_attempt_complete = new_state != GRPC_CHANNEL_CONNECTING;
   // Decide what state to report for the purposes of aggregation and
   // picker behavior.
-  // If the last recorded state was TRANSIENT_FAILURE, ignore the update
-  // unless the new state is READY.
-  bool update_status = true;
-  absl::Status status = connectivity_status();
-  if (last_connectivity_state == GRPC_CHANNEL_TRANSIENT_FAILURE &&
-      new_state != GRPC_CHANNEL_READY &&
-      new_state != GRPC_CHANNEL_TRANSIENT_FAILURE) {
-    new_state = GRPC_CHANNEL_TRANSIENT_FAILURE;
-    {
-      MutexLock lock(&mu_);
-      status = connectivity_status_;
-    }
-    update_status = false;
+  // If the last recorded state was TRANSIENT_FAILURE, ignore the change
+  // unless the new state is READY (or TF again, in which case we need
+  // to update the status).
+  if (logical_connectivity_state_ != GRPC_CHANNEL_TRANSIENT_FAILURE ||
+      new_state == GRPC_CHANNEL_READY ||
+      new_state == GRPC_CHANNEL_TRANSIENT_FAILURE) {
+    // Update state counters used for aggregation.
+    subchannel_list()->UpdateStateCountersLocked(logical_connectivity_state_,
+                                                 new_state);
+    // Update logical state.
+    logical_connectivity_state_ = new_state;
+    logical_connectivity_status_ = connectivity_status();
   }
-  // Update state counters used for aggregation.
-  subchannel_list()->UpdateStateCountersLocked(last_connectivity_state,
-                                               new_state);
-  // Update status seen by picker if needed.
-  if (update_status) {
-    MutexLock lock(&mu_);
-    connectivity_status_ = connectivity_status();
-  }
-  // Update last seen state, also used by picker.
-  connectivity_state_.store(new_state, std::memory_order_relaxed);
   // Update the RH policy's connectivity state, creating new picker and new
   // ring.
   subchannel_list()->UpdateRingHashConnectivityStateLocked(
-      Index(), connection_attempt_complete, status);
+      Index(), connection_attempt_complete, logical_connectivity_status_);
 }
 
 //
@@ -807,7 +791,7 @@ void RingHash::ResetBackoffLocked() {
   }
 }
 
-void RingHash::UpdateLocked(UpdateArgs args) {
+absl::Status RingHash::UpdateLocked(UpdateArgs args) {
   config_ = std::move(args.config);
   ServerAddressList addresses;
   if (args.addresses.ok()) {
@@ -821,17 +805,17 @@ void RingHash::UpdateLocked(UpdateArgs args) {
       gpr_log(GPR_INFO, "[RH %p] received update with addresses error: %s",
               this, args.addresses.status().ToString().c_str());
     }
-    // If we already have a subchannel list, then ignore the resolver
-    // failure and keep using the existing list.
-    if (subchannel_list_ != nullptr) return;
+    // If we already have a subchannel list, then keep using the existing
+    // list, but still report back that the update was not accepted.
+    if (subchannel_list_ != nullptr) return args.addresses.status();
   }
   if (GRPC_TRACE_FLAG_ENABLED(grpc_lb_ring_hash_trace) &&
       latest_pending_subchannel_list_ != nullptr) {
     gpr_log(GPR_INFO, "[RH %p] replacing latest pending subchannel list %p",
             this, latest_pending_subchannel_list_.get());
   }
-  latest_pending_subchannel_list_ = MakeOrphanable<RingHashSubchannelList>(
-      this, std::move(addresses), *args.args);
+  latest_pending_subchannel_list_ = MakeRefCounted<RingHashSubchannelList>(
+      this, std::move(addresses), args.args);
   latest_pending_subchannel_list_->StartWatchingLocked();
   // If we have no existing list or the new list is empty, immediately
   // promote the new list.
@@ -855,13 +839,14 @@ void RingHash::UpdateLocked(UpdateArgs args) {
               : args.addresses.status();
       channel_control_helper()->UpdateState(
           GRPC_CHANNEL_TRANSIENT_FAILURE, status,
-          absl::make_unique<TransientFailurePicker>(status));
-    } else {
-      // Otherwise, report IDLE.
-      subchannel_list_->UpdateRingHashConnectivityStateLocked(
-          /*index=*/0, /*connection_attempt_complete=*/false, absl::OkStatus());
+          MakeRefCounted<TransientFailurePicker>(status));
+      return status;
     }
+    // Otherwise, report IDLE.
+    subchannel_list_->UpdateRingHashConnectivityStateLocked(
+        /*index=*/0, /*connection_attempt_complete=*/false, absl::OkStatus());
   }
+  return absl::OkStatus();
 }
 
 //
@@ -875,31 +860,23 @@ class RingHashFactory : public LoadBalancingPolicyFactory {
     return MakeOrphanable<RingHash>(std::move(args));
   }
 
-  const char* name() const override { return kRingHash; }
+  absl::string_view name() const override { return kRingHash; }
 
-  RefCountedPtr<LoadBalancingPolicy::Config> ParseLoadBalancingConfig(
-      const Json& json, grpc_error_handle* error) const override {
-    size_t min_ring_size;
-    size_t max_ring_size;
-    std::vector<grpc_error_handle> error_list;
-    ParseRingHashLbConfig(json, &min_ring_size, &max_ring_size, &error_list);
-    if (error_list.empty()) {
-      return MakeRefCounted<RingHashLbConfig>(min_ring_size, max_ring_size);
-    } else {
-      *error = GRPC_ERROR_CREATE_FROM_VECTOR(
-          "ring_hash_experimental LB policy config", &error_list);
-      return nullptr;
-    }
+  absl::StatusOr<RefCountedPtr<LoadBalancingPolicy::Config>>
+  ParseLoadBalancingConfig(const Json& json) const override {
+    auto config = LoadFromJson<RingHashConfig>(
+        json, JsonArgs(), "errors validating ring_hash LB policy config");
+    if (!config.ok()) return config.status();
+    return MakeRefCounted<RingHashLbConfig>(config->min_ring_size,
+                                            config->max_ring_size);
   }
 };
 
 }  // namespace
 
-void GrpcLbPolicyRingHashInit() {
-  LoadBalancingPolicyRegistry::Builder::RegisterLoadBalancingPolicyFactory(
-      absl::make_unique<RingHashFactory>());
+void RegisterRingHashLbPolicy(CoreConfiguration::Builder* builder) {
+  builder->lb_policy_registry()->RegisterLoadBalancingPolicyFactory(
+      std::make_unique<RingHashFactory>());
 }
-
-void GrpcLbPolicyRingHashShutdown() {}
 
 }  // namespace grpc_core

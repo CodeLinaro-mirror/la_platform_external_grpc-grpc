@@ -14,8 +14,8 @@
 // limitations under the License.
 //
 
-#ifndef GRPC_CORE_LIB_RESOLVER_RESOLVER_REGISTRY_H
-#define GRPC_CORE_LIB_RESOLVER_RESOLVER_REGISTRY_H
+#ifndef GRPC_SRC_CORE_LIB_RESOLVER_RESOLVER_REGISTRY_H
+#define GRPC_SRC_CORE_LIB_RESOLVER_RESOLVER_REGISTRY_H
 
 #include <grpc/support/port_platform.h>
 
@@ -26,8 +26,7 @@
 
 #include "absl/strings/string_view.h"
 
-#include <grpc/impl/codegen/grpc_types.h>
-
+#include "src/core/lib/channel/channel_args.h"
 #include "src/core/lib/gprpp/orphanable.h"
 #include "src/core/lib/iomgr/iomgr_fwd.h"
 #include "src/core/lib/resolver/resolver.h"
@@ -93,7 +92,7 @@ class ResolverRegistry {
   /// which all resolver calls will be run. \a result_handler is used to return
   /// results from the resolver.
   OrphanablePtr<Resolver> CreateResolver(
-      absl::string_view target, const grpc_channel_args* args,
+      absl::string_view target, const ChannelArgs& args,
       grpc_pollset_set* pollset_set,
       std::shared_ptr<WorkSerializer> work_serializer,
       std::unique_ptr<Resolver::ResultHandler> result_handler) const;
@@ -121,4 +120,4 @@ class ResolverRegistry {
 
 }  // namespace grpc_core
 
-#endif  // GRPC_CORE_LIB_RESOLVER_RESOLVER_REGISTRY_H
+#endif  // GRPC_SRC_CORE_LIB_RESOLVER_RESOLVER_REGISTRY_H
