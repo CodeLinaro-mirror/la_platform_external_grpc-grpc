@@ -37,7 +37,7 @@ then
   # Any installation step is a potential source of breakages,
   # so we are trying to perform as few download-and-install operations
   # as possible.
-  "${PYTHON}" -m pip install --upgrade cython
+  "${PYTHON}" -m pip install --upgrade 'cython<3.0.0rc1'
 fi
 
 # Allow build_ext to build C/C++ files in parallel
@@ -145,10 +145,23 @@ then
   rm -rf venv/
 fi
 
+assert_is_universal_wheel()  {
+  WHL="$1"
+  TMPDIR=$(mktemp -d)
+  unzip "$WHL" -d "$TMPDIR"
+  SO=$(find "$TMPDIR" -name '*.so' | head -n1)
+  if ! file "$SO" | grep "Mach-O universal binary with 2 architectures"; then
+    echo "$WHL is not universal2. Found the following:" >/dev/stderr
+    file "$SO" >/dev/stderr
+    exit 1
+  fi
+}
+
 fix_faulty_universal2_wheel() {
   WHL="$1"
-  if echo "$WHL" | grep "universal2"; then
-    UPDATED_NAME="${WHL//universal2/x86_64}"
+  assert_is_universal_wheel "$WHL"
+  if echo "$WHL" | grep "x86_64"; then
+    UPDATED_NAME="${WHL//x86_64/universal2}"
     mv "$WHL" "$UPDATED_NAME"
   fi
 }

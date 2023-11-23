@@ -19,6 +19,7 @@ from absl import flags
 from absl.testing import absltest
 from google.protobuf import json_format
 
+from framework import xds_k8s_flags
 from framework import xds_k8s_testcase
 from framework import xds_url_map_testcase
 from framework.helpers import skips
@@ -43,6 +44,15 @@ _RPC_COUNT = 100
 
 class AffinityTest(xds_k8s_testcase.RegularXdsKubernetesTestCase):
 
+    @classmethod
+    def setUpClass(cls):
+        super().setUpClass()
+        # Force the python client to use the reference server image (Java)
+        # because the python server doesn't yet support set_not_serving RPC.
+        # TODO(https://github.com/grpc/grpc/issues/30635): Remove when resolved.
+        if cls.lang_spec.client_lang == _Lang.PYTHON:
+            cls.server_image = xds_k8s_flags.SERVER_IMAGE_CANONICAL.value
+
     @staticmethod
     def is_supported(config: skips.TestConfig) -> bool:
         if config.client_lang in _Lang.CPP | _Lang.JAVA:
@@ -52,6 +62,8 @@ class AffinityTest(xds_k8s_testcase.RegularXdsKubernetesTestCase):
         elif config.client_lang == _Lang.PYTHON:
             # TODO(https://github.com/grpc/grpc/issues/27430): supported after
             #      the issue is fixed.
+            return False
+        elif config.client_lang == _Lang.NODE:
             return False
         return True
 
@@ -112,26 +124,37 @@ class AffinityTest(xds_k8s_testcase.RegularXdsKubernetesTestCase):
             rpc_distribution = xds_url_map_testcase.RpcDistributionStats(
                 json_lb_stats)
             self.assertEqual(1, rpc_distribution.num_peers)
+
+            # Check subchannel states.
+            # One should be READY.
+            ready_channels = test_client.find_subchannels_with_state(
+                _ChannelzChannelState.READY)
             self.assertLen(
-                test_client.find_subchannels_with_state(
-                    _ChannelzChannelState.READY),
+                ready_channels,
                 1,
+                msg=('(AffinityTest) The client expected to have one READY'
+                     ' subchannel to one of the test servers. Found'
+                     f' {len(ready_channels)} instead.'),
             )
+            # The rest should be IDLE.
+            expected_idle_channels = _REPLICA_COUNT - 1
+            idle_channels = test_client.find_subchannels_with_state(
+                _ChannelzChannelState.IDLE)
             self.assertLen(
-                test_client.find_subchannels_with_state(
-                    _ChannelzChannelState.IDLE),
-                2,
+                idle_channels,
+                expected_idle_channels,
+                msg=('(AffinityTest) The client expected to have IDLE'
+                     f' subchannels to {expected_idle_channels} of the test'
+                     f' servers. Found {len(idle_channels)} instead.'),
             )
             # Remember the backend inuse, and turn it down later.
             first_backend_inuse = list(
                 rpc_distribution.raw['rpcsByPeer'].keys())[0]
 
         with self.subTest('11_turn_down_server_in_use'):
-            for s in test_servers:
-                if s.pod_name == first_backend_inuse:
-                    logging.info('setting backend %s to NOT_SERVING',
-                                 s.pod_name)
-                    s.set_not_serving()
+            for server in test_servers:
+                if server.hostname == first_backend_inuse:
+                    server.set_not_serving()
 
         with self.subTest('12_wait_for_unhealth_status_propagation'):
             deadline = time.time() + _TD_PROPAGATE_TIMEOUT

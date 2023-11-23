@@ -14,29 +14,28 @@
 // limitations under the License.
 //
 
-#ifndef GRPC_CORE_EXT_FILTERS_CLIENT_CHANNEL_SUBCHANNEL_H
-#define GRPC_CORE_EXT_FILTERS_CLIENT_CHANNEL_SUBCHANNEL_H
+#ifndef GRPC_SRC_CORE_EXT_FILTERS_CLIENT_CHANNEL_SUBCHANNEL_H
+#define GRPC_SRC_CORE_EXT_FILTERS_CLIENT_CHANNEL_SUBCHANNEL_H
 
 #include <grpc/support/port_platform.h>
 
 #include <stddef.h>
 
-#include <deque>
+#include <functional>
 #include <map>
-#include <string>
+#include <memory>
 
 #include "absl/base/thread_annotations.h"
 #include "absl/status/status.h"
-#include "absl/types/optional.h"
 
 #include <grpc/event_engine/event_engine.h>
-#include <grpc/impl/codegen/connectivity_state.h>
-#include <grpc/impl/codegen/grpc_types.h>
+#include <grpc/impl/connectivity_state.h>
 
 #include "src/core/ext/filters/client_channel/client_channel_channelz.h"
 #include "src/core/ext/filters/client_channel/connector.h"
 #include "src/core/ext/filters/client_channel/subchannel_pool_interface.h"
 #include "src/core/lib/backoff/backoff.h"
+#include "src/core/lib/channel/channel_args.h"
 #include "src/core/lib/channel/channel_fwd.h"
 #include "src/core/lib/channel/context.h"
 #include "src/core/lib/gpr/time_precise.h"
@@ -48,6 +47,7 @@
 #include "src/core/lib/gprpp/sync.h"
 #include "src/core/lib/gprpp/time.h"
 #include "src/core/lib/gprpp/unique_type_name.h"
+#include "src/core/lib/gprpp/work_serializer.h"
 #include "src/core/lib/iomgr/call_combiner.h"
 #include "src/core/lib/iomgr/closure.h"
 #include "src/core/lib/iomgr/error.h"
@@ -67,7 +67,7 @@ class SubchannelCall;
 class ConnectedSubchannel : public RefCounted<ConnectedSubchannel> {
  public:
   ConnectedSubchannel(
-      grpc_channel_stack* channel_stack, const grpc_channel_args* args,
+      grpc_channel_stack* channel_stack, const ChannelArgs& args,
       RefCountedPtr<channelz::SubchannelNode> channelz_subchannel);
   ~ConnectedSubchannel() override;
 
@@ -77,7 +77,7 @@ class ConnectedSubchannel : public RefCounted<ConnectedSubchannel> {
   void Ping(grpc_closure* on_initiate, grpc_closure* on_ack);
 
   grpc_channel_stack* channel_stack() const { return channel_stack_; }
-  const grpc_channel_args* args() const { return args_; }
+  const ChannelArgs& args() const { return args_; }
   channelz::SubchannelNode* channelz_subchannel() const {
     return channelz_subchannel_.get();
   }
@@ -86,7 +86,7 @@ class ConnectedSubchannel : public RefCounted<ConnectedSubchannel> {
 
  private:
   grpc_channel_stack* channel_stack_;
-  grpc_channel_args* args_;
+  ChannelArgs args_;
   // ref counted pointer to the channelz node in this connected subchannel's
   // owning subchannel.
   RefCountedPtr<channelz::SubchannelNode> channelz_subchannel_;
@@ -165,46 +165,18 @@ class SubchannelCall {
 // (SubchannelWrapper) that "converts" between the two.
 class Subchannel : public DualRefCounted<Subchannel> {
  public:
+  // TODO(roth): Once we remove pollset_set, consider whether this can
+  // just use the normal AsyncConnectivityStateWatcherInterface API.
   class ConnectivityStateWatcherInterface
       : public RefCounted<ConnectivityStateWatcherInterface> {
    public:
-    struct ConnectivityStateChange {
-      grpc_connectivity_state state;
-      absl::Status status;
-    };
-
-    ~ConnectivityStateWatcherInterface() override = default;
-
-    // Will be invoked whenever the subchannel's connectivity state
-    // changes.  There will be only one invocation of this method on a
-    // given watcher instance at any given time.
-    // Implementations should call PopConnectivityStateChange to get the next
-    // connectivity state change.
-    virtual void OnConnectivityStateChange() = 0;
+    // Invoked whenever the subchannel's connectivity state changes.
+    // There will be only one invocation of this method on a given watcher
+    // instance at any given time.
+    virtual void OnConnectivityStateChange(grpc_connectivity_state state,
+                                           const absl::Status& status) = 0;
 
     virtual grpc_pollset_set* interested_parties() = 0;
-
-    // Enqueues connectivity state change notifications.
-    // When the state changes to READY, connected_subchannel will
-    // contain a ref to the connected subchannel.  When it changes from
-    // READY to some other state, the implementation must release its
-    // ref to the connected subchannel.
-    // TODO(yashkt): This is currently needed to send the state updates in the
-    // right order when asynchronously notifying. This will no longer be
-    // necessary when we have access to EventManager.
-    void PushConnectivityStateChange(ConnectivityStateChange state_change);
-
-    // Dequeues connectivity state change notifications.
-    ConnectivityStateChange PopConnectivityStateChange();
-
-   private:
-    Mutex mu_;  // protects the queue
-    // Keeps track of the updates that the watcher instance must be notified of.
-    // TODO(yashkt): This is currently needed to send the state updates in the
-    // right order when asynchronously notifying. This will no longer be
-    // necessary when we have access to EventManager.
-    std::deque<ConnectivityStateChange> connectivity_state_queue_
-        ABSL_GUARDED_BY(&mu_);
   };
 
   // A base class for producers of subchannel-specific data.
@@ -224,11 +196,11 @@ class Subchannel : public DualRefCounted<Subchannel> {
   // Creates a subchannel.
   static RefCountedPtr<Subchannel> Create(
       OrphanablePtr<SubchannelConnector> connector,
-      const grpc_resolved_address& address, const grpc_channel_args* args);
+      const grpc_resolved_address& address, const ChannelArgs& args);
 
   // The ctor and dtor are not intended to use directly.
   Subchannel(SubchannelKey key, OrphanablePtr<SubchannelConnector> connector,
-             const grpc_channel_args* args);
+             const ChannelArgs& args);
   ~Subchannel() override;
 
   // Throttles keepalive time to \a new_keepalive_time iff \a new_keepalive_time
@@ -237,8 +209,6 @@ class Subchannel : public DualRefCounted<Subchannel> {
   void ThrottleKeepaliveTime(int new_keepalive_time) ABSL_LOCKS_EXCLUDED(mu_);
 
   grpc_pollset_set* pollset_set() const { return pollset_set_; }
-
-  const grpc_channel_args* channel_args() const { return args_; }
 
   channelz::SubchannelNode* channelz_node();
 
@@ -249,15 +219,13 @@ class Subchannel : public DualRefCounted<Subchannel> {
   // The watcher will be destroyed either when the subchannel is
   // destroyed or when CancelConnectivityStateWatch() is called.
   void WatchConnectivityState(
-      const absl::optional<std::string>& health_check_service_name,
       RefCountedPtr<ConnectivityStateWatcherInterface> watcher)
       ABSL_LOCKS_EXCLUDED(mu_);
 
   // Cancels a connectivity state watch.
   // If the watcher has already been destroyed, this is a no-op.
-  void CancelConnectivityStateWatch(
-      const absl::optional<std::string>& health_check_service_name,
-      ConnectivityStateWatcherInterface* watcher) ABSL_LOCKS_EXCLUDED(mu_);
+  void CancelConnectivityStateWatch(ConnectivityStateWatcherInterface* watcher)
+      ABSL_LOCKS_EXCLUDED(mu_);
 
   RefCountedPtr<ConnectedSubchannel> connected_subchannel()
       ABSL_LOCKS_EXCLUDED(mu_) {
@@ -278,11 +246,19 @@ class Subchannel : public DualRefCounted<Subchannel> {
   // We do not hold refs to the data producer; the implementation is
   // expected to register itself upon construction and remove itself
   // upon destruction.
-  void AddDataProducer(DataProducerInterface* data_producer)
+  //
+  // Looks up the current data producer for type and invokes get_or_add()
+  // with a pointer to that producer in the map.  The get_or_add() function
+  // can modify the pointed-to value to update the map.  This provides a
+  // way to either re-use an existing producer or register a new one in
+  // a non-racy way.
+  void GetOrAddDataProducer(
+      UniqueTypeName type,
+      std::function<void(DataProducerInterface**)> get_or_add)
       ABSL_LOCKS_EXCLUDED(mu_);
+  // Removes the data producer from the map, if the current producer for
+  // this type is the specified producer.
   void RemoveDataProducer(DataProducerInterface* data_producer)
-      ABSL_LOCKS_EXCLUDED(mu_);
-  DataProducerInterface* GetDataProducer(UniqueTypeName type)
       ABSL_LOCKS_EXCLUDED(mu_);
 
  private:
@@ -290,6 +266,9 @@ class Subchannel : public DualRefCounted<Subchannel> {
   // the subchannel's state.
   class ConnectivityStateWatcherList {
    public:
+    explicit ConnectivityStateWatcherList(Subchannel* subchannel)
+        : subchannel_(subchannel) {}
+
     ~ConnectivityStateWatcherList() { Clear(); }
 
     void AddWatcherLocked(
@@ -305,6 +284,7 @@ class Subchannel : public DualRefCounted<Subchannel> {
     bool empty() const { return watchers_.empty(); }
 
    private:
+    Subchannel* subchannel_;
     // TODO(roth): Once we can use C++-14 heterogeneous lookups, this can
     // be a set instead of a map.
     std::map<ConnectivityStateWatcherInterface*,
@@ -312,42 +292,7 @@ class Subchannel : public DualRefCounted<Subchannel> {
         watchers_;
   };
 
-  // A map that tracks ConnectivityStateWatcherInterfaces using a particular
-  // health check service name.
-  //
-  // There is one entry in the map for each health check service name.
-  // Entries exist only as long as there are watchers using the
-  // corresponding service name.
-  //
-  // A health check client is maintained only while the subchannel is in
-  // state READY.
-  class HealthWatcherMap {
-   public:
-    void AddWatcherLocked(
-        WeakRefCountedPtr<Subchannel> subchannel,
-        const std::string& health_check_service_name,
-        RefCountedPtr<ConnectivityStateWatcherInterface> watcher);
-    void RemoveWatcherLocked(const std::string& health_check_service_name,
-                             ConnectivityStateWatcherInterface* watcher);
-
-    // Notifies the watcher when the subchannel's state changes.
-    void NotifyLocked(grpc_connectivity_state state, const absl::Status& status)
-        ABSL_EXCLUSIVE_LOCKS_REQUIRED(&Subchannel::mu_);
-
-    grpc_connectivity_state CheckConnectivityStateLocked(
-        Subchannel* subchannel, const std::string& health_check_service_name)
-        ABSL_EXCLUSIVE_LOCKS_REQUIRED(&Subchannel::mu_);
-
-    void ShutdownLocked();
-
-   private:
-    class HealthWatcher;
-
-    std::map<std::string, OrphanablePtr<HealthWatcher>> map_;
-  };
-
   class ConnectedSubchannelStateWatcher;
-  class AsyncWatcherNotifierLocked;
 
   // Sets the subchannel's connectivity state to \a state.
   void SetConnectivityStateLocked(grpc_connectivity_state state,
@@ -372,7 +317,7 @@ class Subchannel : public DualRefCounted<Subchannel> {
   // key_ if overridden by proxy mapper.
   grpc_resolved_address address_for_connect_;
   // Channel args.
-  grpc_channel_args* args_;
+  ChannelArgs args_;
   // pollset_set tracking who's interested in a connection being setup.
   grpc_pollset_set* pollset_set_;
   // Channelz tracking.
@@ -399,10 +344,10 @@ class Subchannel : public DualRefCounted<Subchannel> {
   // - TRANSIENT_FAILURE: connection attempt failed, retry timer pending
   grpc_connectivity_state state_ ABSL_GUARDED_BY(mu_) = GRPC_CHANNEL_IDLE;
   absl::Status status_ ABSL_GUARDED_BY(mu_);
-  // The list of watchers without a health check service name.
+  // The list of connectivity state watchers.
   ConnectivityStateWatcherList watcher_list_ ABSL_GUARDED_BY(mu_);
-  // The map of watchers with health check service names.
-  HealthWatcherMap health_watcher_map_ ABSL_GUARDED_BY(mu_);
+  // Used for sending connectivity state notifications.
+  WorkSerializer work_serializer_;
 
   // Active connection, or null.
   RefCountedPtr<ConnectedSubchannel> connected_subchannel_ ABSL_GUARDED_BY(mu_);
@@ -419,8 +364,9 @@ class Subchannel : public DualRefCounted<Subchannel> {
   // Data producer map.
   std::map<UniqueTypeName, DataProducerInterface*> data_producer_map_
       ABSL_GUARDED_BY(mu_);
+  std::shared_ptr<grpc_event_engine::experimental::EventEngine> event_engine_;
 };
 
 }  // namespace grpc_core
 
-#endif  // GRPC_CORE_EXT_FILTERS_CLIENT_CHANNEL_SUBCHANNEL_H
+#endif  // GRPC_SRC_CORE_EXT_FILTERS_CLIENT_CHANNEL_SUBCHANNEL_H
