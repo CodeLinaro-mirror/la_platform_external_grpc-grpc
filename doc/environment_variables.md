@@ -69,6 +69,7 @@ some configuration as environment variables that can be set.
   - health_check_client - traces health checking client code
   - http - traces state in the http2 transport engine
   - http2_stream_state - traces all http2 stream state mutations.
+  - http2_ping - traces pings/ping acks/antagonist writes in http2 stack.
   - http1 - traces HTTP/1.x operations performed by gRPC
   - inproc - traces the in-process transport
   - http_keepalive - traces gRPC keepalive pings
@@ -84,6 +85,8 @@ some configuration as environment variables that can be set.
   - ring_hash_lb - traces the ring hash load balancing policy
   - rls_lb - traces the RLS load balancing policy
   - round_robin - traces the round_robin load balancing policy
+  - weighted_round_robin_lb - traces the weighted_round_robin load balancing
+    policy
   - queue_pluck
   - grpc_authz_api - traces gRPC authorization
   - server_channel - lightweight trace of significant server channel events
@@ -116,6 +119,7 @@ some configuration as environment variables that can be set.
   - queue_refcount
   - error_refcount
   - stream_refcount
+  - slice_refcount
   - workqueue_refcount
   - fd_refcount
   - cq_refcount
@@ -158,6 +162,11 @@ some configuration as environment variables that can be set.
     resolver based around the c-ares library
   - native - a DNS resolver based around getaddrinfo(), creates a new thread to
     perform name resolution
+
+  *NetBIOS and DNS*: If your network relies on NetBIOS name resolution or a mixture of
+  DNS and NetBIOS name resolution (e.g. in some Windows networks) then you should use
+  the '*native*' DNS resolver or make sure all NetBIOS names are
+  also configured in DNS. The '*ares*' DNS resolver only supports DNS name resolution.
 
 * GRPC_CLIENT_CHANNEL_BACKUP_POLL_INTERVAL_MS
   Default: 5000

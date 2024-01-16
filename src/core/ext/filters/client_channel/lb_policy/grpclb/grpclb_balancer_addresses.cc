@@ -20,13 +20,14 @@
 
 #include <stddef.h>
 
-#include <memory>
+#include <utility>
 
 #include "src/core/lib/channel/channel_args.h"
 #include "src/core/lib/gpr/useful.h"
 
 // Channel arg key for the list of balancer addresses.
-#define GRPC_ARG_GRPCLB_BALANCER_ADDRESSES "grpc.grpclb_balancer_addresses"
+#define GRPC_ARG_GRPCLB_BALANCER_ADDRESSES \
+  GRPC_ARG_NO_SUBCHANNEL_PREFIX "grpc.grpclb_balancer_addresses"
 
 namespace grpc_core {
 
@@ -72,9 +73,17 @@ grpc_arg CreateGrpclbBalancerAddressesArg(
 }
 
 const ServerAddressList* FindGrpclbBalancerAddressesInChannelArgs(
-    const grpc_channel_args& args) {
-  return grpc_channel_args_find_pointer<const ServerAddressList>(
-      &args, const_cast<char*>(GRPC_ARG_GRPCLB_BALANCER_ADDRESSES));
+    const ChannelArgs& args) {
+  return args.GetPointer<const ServerAddressList>(
+      GRPC_ARG_GRPCLB_BALANCER_ADDRESSES);
+}
+
+ChannelArgs SetGrpcLbBalancerAddresses(const ChannelArgs& args,
+                                       ServerAddressList address_list) {
+  return args.Set(
+      GRPC_ARG_GRPCLB_BALANCER_ADDRESSES,
+      ChannelArgs::Pointer(new ServerAddressList(std::move(address_list)),
+                           &kBalancerAddressesArgVtable));
 }
 
 }  // namespace grpc_core

@@ -1,31 +1,34 @@
-/*
- *
- * Copyright 2015 gRPC authors.
- *
- * Licensed under the Apache License, Version 2.0 (the "License");
- * you may not use this file except in compliance with the License.
- * You may obtain a copy of the License at
- *
- *     http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
- *
- */
+//
+//
+// Copyright 2015 gRPC authors.
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     http://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+//
+//
 
 #include "src/core/lib/security/transport/secure_endpoint.h"
 
 #include <fcntl.h>
 #include <sys/types.h>
 
+#include <gtest/gtest.h>
+
 #include <grpc/grpc.h>
 #include <grpc/support/alloc.h>
 #include <grpc/support/log.h>
 
 #include "src/core/lib/gpr/useful.h"
+#include "src/core/lib/gprpp/crash.h"
 #include "src/core/lib/iomgr/endpoint_pair.h"
 #include "src/core/lib/iomgr/iomgr.h"
 #include "src/core/lib/slice/slice_internal.h"
@@ -58,9 +61,9 @@ static void me_write(grpc_endpoint* ep, grpc_slice_buffer* slices,
     // Estimate the frame size of the next frame.
     int next_frame_size =
         tsi_fake_zero_copy_grpc_protector_next_frame_size(slices);
-    GPR_ASSERT(next_frame_size > TSI_FAKE_FRAME_HEADER_SIZE);
+    ASSERT_GT(next_frame_size, TSI_FAKE_FRAME_HEADER_SIZE);
     // Ensure the protected data size does not exceed the max_frame_size.
-    GPR_ASSERT(next_frame_size - TSI_FAKE_FRAME_HEADER_SIZE <= max_frame_size);
+    ASSERT_LE(next_frame_size - TSI_FAKE_FRAME_HEADER_SIZE, max_frame_size);
     // Move this frame into a staging buffer and repeat.
     grpc_slice_buffer_move_first(slices, next_frame_size, &m->staging_buffer);
     remaining -= next_frame_size;
@@ -185,11 +188,11 @@ static grpc_endpoint_test_fixture secure_endpoint_create_fixture_tcp_socketpair(
         result = tsi_frame_protector_protect(
             fake_write_protector, message_bytes, &processed_message_size, cur,
             &protected_buffer_size_to_send);
-        GPR_ASSERT(result == TSI_OK);
+        EXPECT_EQ(result, TSI_OK);
         message_bytes += processed_message_size;
         message_size -= processed_message_size;
         cur += protected_buffer_size_to_send;
-        GPR_ASSERT(buffer_size >= protected_buffer_size_to_send);
+        EXPECT_GE(buffer_size, protected_buffer_size_to_send);
         buffer_size -= protected_buffer_size_to_send;
       }
       grpc_slice_unref(plain);
@@ -199,9 +202,9 @@ static grpc_endpoint_test_fixture secure_endpoint_create_fixture_tcp_socketpair(
       result = tsi_frame_protector_protect_flush(fake_write_protector, cur,
                                                  &protected_buffer_size_to_send,
                                                  &still_pending_size);
-      GPR_ASSERT(result == TSI_OK);
+      EXPECT_EQ(result, TSI_OK);
       cur += protected_buffer_size_to_send;
-      GPR_ASSERT(buffer_size >= protected_buffer_size_to_send);
+      EXPECT_GE(buffer_size, protected_buffer_size_to_send);
       buffer_size -= protected_buffer_size_to_send;
     } while (still_pending_size > 0);
     encrypted_leftover = grpc_slice_from_copied_buffer(
@@ -286,19 +289,17 @@ static void test_leftover(grpc_endpoint_test_config config, size_t slice_size) {
                      /*min_progress_size=*/1);
 
   grpc_core::ExecCtx::Get()->Flush();
-  GPR_ASSERT(n == 1);
-  GPR_ASSERT(incoming.count == 1);
-  GPR_ASSERT(grpc_slice_eq(s, incoming.slices[0]));
+  ASSERT_EQ(n, 1);
+  ASSERT_EQ(incoming.count, 1);
+  ASSERT_TRUE(grpc_slice_eq(s, incoming.slices[0]));
 
-  grpc_endpoint_shutdown(
-      f.client_ep, GRPC_ERROR_CREATE_FROM_STATIC_STRING("test_leftover end"));
-  grpc_endpoint_shutdown(
-      f.server_ep, GRPC_ERROR_CREATE_FROM_STATIC_STRING("test_leftover end"));
+  grpc_endpoint_shutdown(f.client_ep, GRPC_ERROR_CREATE("test_leftover end"));
+  grpc_endpoint_shutdown(f.server_ep, GRPC_ERROR_CREATE("test_leftover end"));
   grpc_endpoint_destroy(f.client_ep);
   grpc_endpoint_destroy(f.server_ep);
 
-  grpc_slice_unref_internal(s);
-  grpc_slice_buffer_destroy_internal(&incoming);
+  grpc_slice_unref(s);
+  grpc_slice_buffer_destroy(&incoming);
 
   clean_up();
 }
@@ -307,9 +308,8 @@ static void destroy_pollset(void* p, grpc_error_handle /*error*/) {
   grpc_pollset_destroy(static_cast<grpc_pollset*>(p));
 }
 
-int main(int argc, char** argv) {
+TEST(SecureEndpointTest, MainTest) {
   grpc_closure destroyed;
-  grpc::testing::TestEnvironment env(&argc, argv);
   grpc_init();
 
   {
@@ -328,6 +328,10 @@ int main(int argc, char** argv) {
   grpc_shutdown();
 
   gpr_free(g_pollset);
+}
 
-  return 0;
+int main(int argc, char** argv) {
+  grpc::testing::TestEnvironment env(&argc, argv);
+  ::testing::InitGoogleTest(&argc, argv);
+  return RUN_ALL_TESTS();
 }

@@ -43,7 +43,8 @@
 #include "src/core/ext/filters/client_channel/resolver/fake/fake_resolver.h"
 #include "src/core/lib/address_utils/parse_address.h"
 #include "src/core/lib/channel/channel_args.h"
-#include "src/core/lib/gpr/env.h"
+#include "src/core/lib/config/config_vars.h"
+#include "src/core/lib/gprpp/env.h"
 #include "src/core/lib/gprpp/host_port.h"
 #include "src/core/lib/gprpp/time.h"
 #include "src/core/lib/iomgr/sockaddr.h"
@@ -100,7 +101,7 @@ class MyTestServiceImpl : public BackendService {
                     ::testing::Pair(kCallCredsMdKey, kCallCredsMdValue)));
     IncreaseRequestCount();
     auto client_metadata = context->client_metadata();
-    auto range = client_metadata.equal_range("X-Google-RLS-Data");
+    auto range = client_metadata.equal_range("x-google-rls-data");
     {
       grpc::internal::MutexLock lock(&mu_);
       for (auto it = range.first; it != range.second; ++it) {
@@ -134,7 +135,8 @@ class FakeResolverResponseGeneratorWrapper {
 
   void SetNextResolution(absl::string_view service_config_json) {
     grpc_core::ExecCtx exec_ctx;
-    response_generator_->SetResponse(BuildFakeResults(service_config_json));
+    response_generator_->SetResponseSynchronously(
+        BuildFakeResults(service_config_json));
   }
 
   grpc_core::FakeResolverResponseGenerator* Get() const {
@@ -145,13 +147,9 @@ class FakeResolverResponseGeneratorWrapper {
   static grpc_core::Resolver::Result BuildFakeResults(
       absl::string_view service_config_json) {
     grpc_core::Resolver::Result result;
-    grpc_error_handle error = GRPC_ERROR_NONE;
-    result.service_config = grpc_core::ServiceConfigImpl::Create(
-        result.args, service_config_json, &error);
-    EXPECT_EQ(error, GRPC_ERROR_NONE)
-        << "JSON: " << service_config_json
-        << "Error: " << grpc_error_std_string(error);
-    EXPECT_NE(*result.service_config, nullptr);
+    result.service_config =
+        grpc_core::ServiceConfigImpl::Create(result.args, service_config_json);
+    EXPECT_TRUE(result.service_config.ok()) << result.service_config.status();
     return result;
   }
 
@@ -162,15 +160,17 @@ class FakeResolverResponseGeneratorWrapper {
 class RlsEnd2endTest : public ::testing::Test {
  protected:
   static void SetUpTestSuite() {
-    gpr_setenv("GRPC_EXPERIMENTAL_ENABLE_RLS_LB_POLICY", "true");
-    GPR_GLOBAL_CONFIG_SET(grpc_client_channel_backup_poll_interval_ms, 1);
+    grpc_core::ConfigVars::Overrides overrides;
+    overrides.client_channel_backup_poll_interval_ms = 1;
+    grpc_core::ConfigVars::SetOverrides(overrides);
+    grpc_core::CoreConfiguration::RegisterBuilder(
+        grpc_core::RegisterFixedAddressLoadBalancingPolicy);
     grpc_init();
-    grpc_core::RegisterFixedAddressLoadBalancingPolicy();
   }
 
   static void TearDownTestSuite() {
     grpc_shutdown_blocking();
-    gpr_unsetenv("GRPC_EXPERIMENTAL_ENABLE_RLS_LB_POLICY");
+    grpc_core::CoreConfiguration::Reset();
   }
 
   void SetUp() override {
@@ -179,28 +179,21 @@ class RlsEnd2endTest : public ::testing::Test {
     grpc_core::LocalhostResolves(&localhost_resolves_to_ipv4,
                                  &localhost_resolves_to_ipv6);
     ipv6_only_ = !localhost_resolves_to_ipv4 && localhost_resolves_to_ipv6;
-    rls_server_ = absl::make_unique<ServerThread<RlsServiceImpl>>(
+    rls_server_ = std::make_unique<ServerThread<RlsServiceImpl>>(
         "rls", [](grpc::ServerContext* ctx) {
           EXPECT_THAT(ctx->client_metadata(),
                       ::testing::Contains(
                           ::testing::Pair(kCallCredsMdKey, kCallCredsMdValue)));
+          EXPECT_EQ(ctx->ExperimentalGetAuthority(), kServerName);
         });
     rls_server_->Start();
+    // Set up client.
     resolver_response_generator_ =
-        absl::make_unique<FakeResolverResponseGeneratorWrapper>();
-    ResetStub();
-  }
-
-  void TearDown() override {
-    ShutdownBackends();
-    rls_server_->Shutdown();
-  }
-
-  void ResetStub(const char* expected_authority = kServerName) {
+        std::make_unique<FakeResolverResponseGeneratorWrapper>();
     ChannelArguments args;
     args.SetPointer(GRPC_ARG_FAKE_RESOLVER_RESPONSE_GENERATOR,
                     resolver_response_generator_->Get());
-    args.SetString(GRPC_ARG_FAKE_SECURITY_EXPECTED_TARGETS, expected_authority);
+    args.SetString(GRPC_ARG_FAKE_SECURITY_EXPECTED_TARGETS, kServerName);
     grpc_channel_credentials* channel_creds =
         grpc_fake_transport_security_credentials_create();
     grpc_call_credentials* call_creds = grpc_md_only_test_credentials_create(
@@ -210,9 +203,14 @@ class RlsEnd2endTest : public ::testing::Test {
                                                   nullptr));
     call_creds->Unref();
     channel_creds->Unref();
-    channel_ = grpc::CreateCustomChannel(
-        absl::StrCat("fake:///", kServerName).c_str(), std::move(creds), args);
+    channel_ = grpc::CreateCustomChannel(absl::StrCat("fake:///", kServerName),
+                                         std::move(creds), args);
     stub_ = grpc::testing::EchoTestService::NewStub(channel_);
+  }
+
+  void TearDown() override {
+    ShutdownBackends();
+    rls_server_->Shutdown();
   }
 
   void ShutdownBackends() {
@@ -225,7 +223,7 @@ class RlsEnd2endTest : public ::testing::Test {
     backends_.clear();
     for (size_t i = 0; i < num_servers; ++i) {
       backends_.push_back(
-          absl::make_unique<ServerThread<MyTestServiceImpl>>("backend"));
+          std::make_unique<ServerThread<MyTestServiceImpl>>("backend"));
       backends_.back()->Start();
     }
   }
@@ -236,7 +234,7 @@ class RlsEnd2endTest : public ::testing::Test {
   }
 
   struct RpcOptions {
-    int timeout_ms = 1000;
+    int timeout_ms = 2000;
     bool wait_for_ready = false;
     std::vector<std::pair<std::string, std::string>> metadata;
 
@@ -429,7 +427,7 @@ class RlsEnd2endTest : public ::testing::Test {
       // by ServerThread::Serve from firing before the wait below is hit.
       grpc::internal::MutexLock lock(&mu);
       grpc::internal::CondVar cond;
-      thread_ = absl::make_unique<std::thread>(
+      thread_ = std::make_unique<std::thread>(
           std::bind(&ServerThread::Serve, this, &mu, &cond));
       cond.Wait(&mu);
       gpr_log(GPR_INFO, "%s server startup complete", type_.c_str());
@@ -1381,35 +1379,6 @@ TEST_F(RlsEnd2endTest, ConnectivityStateTransientFailure) {
   EXPECT_EQ(rls_server_->service_.response_count(), 1);
   EXPECT_EQ(GRPC_CHANNEL_TRANSIENT_FAILURE,
             channel_->GetState(/*try_to_connect=*/false));
-}
-
-TEST_F(RlsEnd2endTest, RlsAuthorityDeathTest) {
-  GTEST_FLAG_SET(death_test_style, "threadsafe");
-  ResetStub("incorrect_authority");
-  SetNextResolution(
-      MakeServiceConfigBuilder()
-          .AddKeyBuilder(absl::StrFormat("\"names\":[{"
-                                         "  \"service\":\"%s\","
-                                         "  \"method\":\"%s\""
-                                         "}],"
-                                         "\"headers\":["
-                                         "  {"
-                                         "    \"key\":\"%s\","
-                                         "    \"names\":["
-                                         "      \"key1\""
-                                         "    ]"
-                                         "  }"
-                                         "]",
-                                         kServiceValue, kMethodValue, kTestKey))
-          .Build());
-  // Make sure that we blow up (via abort() from the security connector) when
-  // the authority for the RLS channel doesn't match expectations.
-  ASSERT_DEATH_IF_SUPPORTED(
-      {
-        CheckRpcSendOk(DEBUG_LOCATION,
-                       RpcOptions().set_metadata({{"key1", kTestValue}}));
-      },
-      "");
 }
 
 }  // namespace

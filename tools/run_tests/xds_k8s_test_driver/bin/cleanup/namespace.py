@@ -22,17 +22,21 @@ from framework import xds_k8s_flags
 
 def main(argv):
     if len(argv) > 1:
-        raise app.UsageError('Too many command-line arguments.')
+        raise app.UsageError("Too many command-line arguments.")
     cleanup.load_keep_config()
+
+    # Must be called before KubernetesApiManager or GcpApiManager init.
+    xds_flags.set_socket_default_timeout_from_flag()
 
     project: str = xds_flags.PROJECT.value
     network: str = xds_flags.NETWORK.value
     gcp_service_account: str = xds_k8s_flags.GCP_SERVICE_ACCOUNT.value
     dry_run: bool = cleanup.DRY_RUN.value
 
-    cleanup.find_and_remove_leaked_k8s_resources(dry_run, project, network,
-                                                 gcp_service_account)
+    cleanup.find_and_remove_leaked_k8s_resources(
+        dry_run, project, network, gcp_service_account
+    )
 
 
-if __name__ == '__main__':
+if __name__ == "__main__":
     app.run(main)
