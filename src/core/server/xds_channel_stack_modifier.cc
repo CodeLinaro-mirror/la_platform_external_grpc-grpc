@@ -27,9 +27,9 @@
 #include "src/core/lib/channel/channel_args.h"
 #include "src/core/lib/channel/channel_stack.h"
 #include "src/core/lib/config/core_configuration.h"
-#include "src/core/lib/gpr/useful.h"
 #include "src/core/lib/surface/channel_init.h"
 #include "src/core/lib/surface/channel_stack_type.h"
+#include "src/core/util/useful.h"
 
 namespace grpc_core {
 namespace {
@@ -63,7 +63,7 @@ void XdsChannelStackModifier::ModifyChannelStack(ChannelStackBuilder& builder) {
   for (auto it = builder.mutable_stack()->begin();
        it != builder.mutable_stack()->end(); ++it) {
     for (absl::string_view predicate_name : {"server", "census_server"}) {
-      if (predicate_name == (*it)->name) insert_before = it + 1;
+      if (predicate_name == (*it)->name.name()) insert_before = it + 1;
     }
   }
   for (const grpc_channel_filter* filter : filters_) {

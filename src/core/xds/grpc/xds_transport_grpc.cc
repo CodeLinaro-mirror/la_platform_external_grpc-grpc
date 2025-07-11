@@ -253,12 +253,12 @@ class GrpcXdsTransportFactory::GrpcXdsTransport::StateWatcher final
 
 namespace {
 
-OrphanablePtr<Channel> CreateXdsChannel(
-    const ChannelArgs& args, const GrpcXdsBootstrap::GrpcXdsServer& server) {
+RefCountedPtr<Channel> CreateXdsChannel(const ChannelArgs& args,
+                                        const GrpcXdsServer& server) {
   RefCountedPtr<grpc_channel_credentials> channel_creds =
       CoreConfiguration::Get().channel_creds_registry().CreateChannelCreds(
           server.channel_creds_config());
-  return OrphanablePtr<Channel>(Channel::FromC(grpc_channel_create(
+  return RefCountedPtr<Channel>(Channel::FromC(grpc_channel_create(
       server.server_uri().c_str(), channel_creds.get(), args.ToC().get())));
 }
 
@@ -269,9 +269,8 @@ GrpcXdsTransportFactory::GrpcXdsTransport::GrpcXdsTransport(
     std::function<void(absl::Status)> on_connectivity_failure,
     absl::Status* status)
     : factory_(factory) {
-  channel_ = CreateXdsChannel(
-      factory->args_,
-      static_cast<const GrpcXdsBootstrap::GrpcXdsServer&>(server));
+  channel_ = CreateXdsChannel(factory->args_,
+                              static_cast<const GrpcXdsServer&>(server));
   CHECK(channel_ != nullptr);
   if (channel_->IsLame()) {
     *status = absl::UnavailableError("xds client has a lame channel");

@@ -21,6 +21,8 @@
 #include <string.h>
 
 #include "absl/log/check.h"
+#include "absl/log/log.h"
+#include "absl/strings/str_format.h"
 
 #include <grpc/support/alloc.h>
 #include <grpc/support/cpu.h>
@@ -28,26 +30,20 @@
 #include <grpc/support/port_platform.h>
 #include <grpc/support/sync.h>
 
-#include "src/core/lib/gpr/useful.h"
+#include "src/core/lib/debug/trace_impl.h"
 #include "src/core/lib/gprpp/crash.h"
 #include "src/core/lib/gprpp/memory.h"
 #include "src/core/lib/iomgr/exec_ctx.h"
 #include "src/core/lib/iomgr/iomgr_internal.h"
+#include "src/core/util/useful.h"
 
 #define MAX_DEPTH 2
 
-#define EXECUTOR_TRACE(format, ...)                       \
-  do {                                                    \
-    if (GRPC_TRACE_FLAG_ENABLED(executor_trace)) {        \
-      gpr_log(GPR_INFO, "EXECUTOR " format, __VA_ARGS__); \
-    }                                                     \
-  } while (0)
-
-#define EXECUTOR_TRACE0(str)                       \
-  do {                                             \
-    if (GRPC_TRACE_FLAG_ENABLED(executor_trace)) { \
-      gpr_log(GPR_INFO, "EXECUTOR " str);          \
-    }                                              \
+#define EXECUTOR_TRACE(format, ...)                                     \
+  do {                                                                  \
+    if (GRPC_TRACE_FLAG_ENABLED(executor)) {                            \
+      LOG(INFO) << "EXECUTOR " << absl::StrFormat(format, __VA_ARGS__); \
+    }                                                                   \
   } while (0)
 
 namespace grpc_core {
@@ -86,8 +82,6 @@ const EnqueueFunc
                               {resolver_enqueue_short, resolver_enqueue_long}};
 
 }  // namespace
-
-TraceFlag executor_trace(false, "executor");
 
 Executor::Executor(const char* name) : name_(name) {
   adding_thread_lock_ = GPR_SPINLOCK_STATIC_INITIALIZER;
@@ -368,7 +362,7 @@ void Executor::Enqueue(grpc_closure* closure, grpc_error_handle error,
 // the grpc_init() and grpc_shutdown() code paths which are protected by a
 // global mutex. So it is okay to assume that these functions are thread-safe
 void Executor::InitAll() {
-  EXECUTOR_TRACE0("Executor::InitAll() enter");
+  GRPC_TRACE_LOG(executor, INFO) << "Executor::InitAll() enter";
 
   // Return if Executor::InitAll() is already called earlier
   if (executors[static_cast<size_t>(ExecutorType::DEFAULT)] != nullptr) {
@@ -384,7 +378,7 @@ void Executor::InitAll() {
   executors[static_cast<size_t>(ExecutorType::DEFAULT)]->Init();
   executors[static_cast<size_t>(ExecutorType::RESOLVER)]->Init();
 
-  EXECUTOR_TRACE0("Executor::InitAll() done");
+  GRPC_TRACE_LOG(executor, INFO) << "Executor::InitAll() done";
 }
 
 void Executor::Run(grpc_closure* closure, grpc_error_handle error,
@@ -394,7 +388,7 @@ void Executor::Run(grpc_closure* closure, grpc_error_handle error,
 }
 
 void Executor::ShutdownAll() {
-  EXECUTOR_TRACE0("Executor::ShutdownAll() enter");
+  GRPC_TRACE_LOG(executor, INFO) << "Executor::ShutdownAll() enter";
 
   // Return if Executor:SshutdownAll() is already called earlier
   if (executors[static_cast<size_t>(ExecutorType::DEFAULT)] == nullptr) {
@@ -422,7 +416,7 @@ void Executor::ShutdownAll() {
   executors[static_cast<size_t>(ExecutorType::DEFAULT)] = nullptr;
   executors[static_cast<size_t>(ExecutorType::RESOLVER)] = nullptr;
 
-  EXECUTOR_TRACE0("Executor::ShutdownAll() done");
+  GRPC_TRACE_LOG(executor, INFO) << "Executor::ShutdownAll() done";
 }
 
 bool Executor::IsThreaded(ExecutorType executor_type) {

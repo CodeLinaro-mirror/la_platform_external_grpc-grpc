@@ -27,12 +27,12 @@
 #include <grpc/support/port_platform.h>
 
 #include "src/core/lib/channel/channel_args.h"
-#include "src/core/lib/gpr/useful.h"
 #include "src/core/lib/security/credentials/tls/grpc_tls_certificate_provider.h"
 #include "src/core/lib/security/credentials/tls/grpc_tls_credentials_options.h"
 #include "src/core/lib/security/credentials/tls/tls_credentials.h"
 #include "src/core/lib/security/credentials/tls/tls_utils.h"
 #include "src/core/load_balancing/xds/xds_channel_args.h"
+#include "src/core/util/useful.h"
 #include "src/core/xds/grpc/xds_certificate_provider.h"
 
 namespace grpc_core {
@@ -142,18 +142,22 @@ XdsCredentials::create_security_connector(
   auto xds_certificate_provider = args->GetObjectRef<XdsCertificateProvider>();
   if (xds_certificate_provider != nullptr) {
     const bool watch_root = xds_certificate_provider->ProvidesRootCerts();
+    const bool use_system_root_certs =
+        xds_certificate_provider->UseSystemRootCerts();
     const bool watch_identity =
         xds_certificate_provider->ProvidesIdentityCerts();
-    if (watch_root || watch_identity) {
+    if (watch_root || use_system_root_certs || watch_identity) {
       auto tls_credentials_options =
           MakeRefCounted<grpc_tls_credentials_options>();
-      tls_credentials_options->set_certificate_provider(
-          xds_certificate_provider);
-      if (watch_root) {
-        tls_credentials_options->set_watch_root_cert(true);
-      }
-      if (watch_identity) {
-        tls_credentials_options->set_watch_identity_pair(true);
+      if (watch_root || watch_identity) {
+        tls_credentials_options->set_certificate_provider(
+            xds_certificate_provider);
+        if (watch_root) {
+          tls_credentials_options->set_watch_root_cert(true);
+        }
+        if (watch_identity) {
+          tls_credentials_options->set_watch_identity_pair(true);
+        }
       }
       tls_credentials_options->set_verify_server_cert(true);
       tls_credentials_options->set_certificate_verifier(

@@ -26,6 +26,7 @@
 #include "absl/cleanup/cleanup.h"
 #include "absl/functional/any_invocable.h"
 #include "absl/log/check.h"
+#include "absl/log/log.h"
 #include "absl/status/status.h"
 #include "absl/strings/match.h"
 #include "absl/strings/str_cat.h"
@@ -34,10 +35,8 @@
 #include <grpc/event_engine/memory_allocator.h>
 #include <grpc/event_engine/slice_buffer.h>
 #include <grpc/support/cpu.h>
-#include <grpc/support/log.h>
 #include <grpc/support/port_platform.h>
 
-#include "src/core/lib/config/config_vars.h"
 #include "src/core/lib/debug/trace.h"
 #include "src/core/lib/event_engine/ares_resolver.h"
 #include "src/core/lib/event_engine/forkable.h"
@@ -49,12 +48,11 @@
 #include "src/core/lib/event_engine/posix_engine/tcp_socket_utils.h"
 #include "src/core/lib/event_engine/posix_engine/timer.h"
 #include "src/core/lib/event_engine/tcp_socket_utils.h"
-#include "src/core/lib/event_engine/trace.h"
 #include "src/core/lib/event_engine/utils.h"
-#include "src/core/lib/gpr/useful.h"
 #include "src/core/lib/gprpp/crash.h"
 #include "src/core/lib/gprpp/no_destruct.h"
 #include "src/core/lib/gprpp/sync.h"
+#include "src/core/util/useful.h"
 
 #ifdef GRPC_POSIX_SOCKET_TCP
 #include <errno.h>       // IWYU pragma: keep
@@ -93,15 +91,6 @@ class TimerForkCallbackMethods {
   static void PostforkParent() { g_timer_fork_manager->PostforkParent(); }
   static void PostforkChild() { g_timer_fork_manager->PostforkChild(); }
 };
-
-bool ShouldUseAresDnsResolver() {
-#if GRPC_ARES == 1 && defined(GRPC_POSIX_SOCKET_ARES_EV_DRIVER)
-  auto resolver_env = grpc_core::ConfigVars::Get().DnsResolver();
-  return resolver_env.empty() || absl::EqualsIgnoreCase(resolver_env, "ares");
-#else   // GRPC_ARES == 1 && defined(GRPC_POSIX_SOCKET_ARES_EV_DRIVER)
-  return false;
-#endif  // GRPC_ARES == 1 && defined(GRPC_POSIX_SOCKET_ARES_EV_DRIVER)
-}
 
 }  // namespace
 
@@ -231,7 +220,7 @@ void AsyncConnect::OnWritable(absl::Status status)
       // your program or another program on the same computer
       // opened too many network connections.  The "easy" fix:
       // don't do that!
-      gpr_log(GPR_ERROR, "kernel out of buffers");
+      LOG(ERROR) << "kernel out of buffers";
       mu_.Unlock();
       fd->NotifyOnWrite(on_writable_);
       // Don't run the cleanup function for this case.
@@ -445,8 +434,8 @@ struct PosixEventEngine::ClosureData final : public EventEngine::Closure {
   EventEngine::TaskHandle handle;
 
   void Run() override {
-    GRPC_EVENT_ENGINE_TRACE("PosixEventEngine:%p executing callback:%s", engine,
-                            HandleToString(handle).c_str());
+    GRPC_TRACE_LOG(event_engine, INFO)
+        << "PosixEventEngine:" << engine << " executing callback:" << handle;
     {
       grpc_core::MutexLock lock(&engine->mu_);
       engine->known_handles_.erase(handle);
@@ -459,13 +448,11 @@ struct PosixEventEngine::ClosureData final : public EventEngine::Closure {
 PosixEventEngine::~PosixEventEngine() {
   {
     grpc_core::MutexLock lock(&mu_);
-    if (GRPC_TRACE_FLAG_ENABLED(grpc_event_engine_trace)) {
+    if (GRPC_TRACE_FLAG_ENABLED(event_engine)) {
       for (auto handle : known_handles_) {
-        gpr_log(GPR_ERROR,
-                "(event_engine) PosixEventEngine:%p uncleared "
-                "TaskHandle at "
-                "shutdown:%s",
-                this, HandleToString(handle).c_str());
+        LOG(ERROR) << "(event_engine) PosixEventEngine:" << this
+                   << " uncleared TaskHandle at shutdown:"
+                   << HandleToString(handle);
       }
     }
     CHECK(GPR_LIKELY(known_handles_.empty()));
@@ -522,8 +509,8 @@ EventEngine::TaskHandle PosixEventEngine::RunAfterInternal(
   grpc_core::MutexLock lock(&mu_);
   known_handles_.insert(handle);
   cd->handle = handle;
-  GRPC_EVENT_ENGINE_TRACE("PosixEventEngine:%p scheduling callback:%s", this,
-                          HandleToString(handle).c_str());
+  GRPC_TRACE_LOG(event_engine, INFO)
+      << "PosixEventEngine:" << this << " scheduling callback:" << handle;
   timer_manager_->TimerInit(&cd->timer, when_ts, cd);
   return handle;
 }
@@ -558,8 +545,8 @@ PosixEventEngine::GetDNSResolver(
   // configuration.
   if (ShouldUseAresDnsResolver()) {
 #if GRPC_ARES == 1 && defined(GRPC_POSIX_SOCKET_ARES_EV_DRIVER)
-    GRPC_EVENT_ENGINE_DNS_TRACE("PosixEventEngine:%p creating AresResolver",
-                                this);
+    GRPC_TRACE_LOG(event_engine_dns, INFO)
+        << "PosixEventEngine::" << this << " creating AresResolver";
     auto ares_resolver = AresResolver::CreateAresResolver(
         options.dns_server,
         std::make_unique<GrpcPolledFdFactoryPosix>(poller_manager_->Poller()),
@@ -571,8 +558,8 @@ PosixEventEngine::GetDNSResolver(
         std::move(*ares_resolver));
 #endif  // GRPC_ARES == 1 && defined(GRPC_POSIX_SOCKET_ARES_EV_DRIVER)
   }
-  GRPC_EVENT_ENGINE_DNS_TRACE(
-      "PosixEventEngine:%p creating NativePosixDNSResolver", this);
+  GRPC_TRACE_LOG(event_engine_dns, INFO)
+      << "PosixEventEngine::" << this << " creating NativePosixDNSResolver";
   return std::make_unique<NativePosixDNSResolver>(shared_from_this());
 #endif  // GRPC_POSIX_SOCKET_RESOLVE_ADDRESS
 }
@@ -675,6 +662,22 @@ PosixEventEngine::CreatePosixEndpointFromFd(int fd,
       "PosixEventEngine::CreatePosixEndpointFromFd is not supported on "
       "this platform");
 #endif  // GRPC_PLATFORM_SUPPORTS_POSIX_POLLING
+}
+
+std::unique_ptr<EventEngine::Endpoint> PosixEventEngine::CreateEndpointFromFd(
+    int fd, const EndpointConfig& config) {
+  auto options = TcpOptionsFromEndpointConfig(config);
+  MemoryAllocator allocator;
+  if (options.memory_allocator_factory != nullptr) {
+    return CreatePosixEndpointFromFd(
+        fd, config,
+        options.memory_allocator_factory->CreateMemoryAllocator(
+            absl::StrCat("allocator:", fd)));
+  }
+  return CreatePosixEndpointFromFd(
+      fd, config,
+      options.resource_quota->memory_quota()->CreateMemoryAllocator(
+          absl::StrCat("allocator:", fd)));
 }
 
 absl::StatusOr<std::unique_ptr<EventEngine::Listener>>

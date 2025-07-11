@@ -22,9 +22,8 @@
 
 #include "absl/cleanup/cleanup.h"
 #include "absl/log/check.h"
+#include "absl/log/log.h"
 #include "absl/types/variant.h"
-
-#include <grpc/support/log.h>
 
 #include "src/core/lib/event_engine/default_event_engine.h"
 #include "src/core/lib/gprpp/crash.h"
@@ -78,7 +77,7 @@ absl::Status WriteTrailingMetadata(const Transaction& tx,
   } else {
     // client suffix currently is always empty according to the wireformat
     if (!tx.GetSuffixMetadata().empty()) {
-      gpr_log(GPR_ERROR, "Got non-empty suffix metadata from client.");
+      LOG(ERROR) << "Got non-empty suffix metadata from client.";
     }
   }
   return absl::OkStatus();
@@ -113,15 +112,13 @@ absl::Status WireWriterImpl::MakeBinderTransaction(
   if (static_cast<int32_t>(tx_code) >= kFirstCallId) {
     int64_t parcel_size = parcel->GetDataSize();
     if (parcel_size > 2 * kBlockSize) {
-      gpr_log(GPR_ERROR,
-              "Unexpected large transaction (possibly caused by a very large "
-              "metadata). This might overflow the binder "
-              "transaction buffer. Size: %" PRId64 " bytes",
-              parcel_size);
+      LOG(ERROR) << "Unexpected large transaction (possibly caused by a very "
+                    "large metadata). This might overflow the binder "
+                    "transaction buffer. Size: "
+                 << parcel_size << " bytes";
     }
     num_outgoing_bytes_ += parcel_size;
-    gpr_log(GPR_INFO, "Total outgoing bytes: %" PRId64,
-            num_outgoing_bytes_.load());
+    LOG(INFO) << "Total outgoing bytes: " << num_outgoing_bytes_.load();
   }
   CHECK(!is_transacting_);
   is_transacting_ = true;
@@ -218,8 +215,7 @@ void WireWriterImpl::RunScheduledTxInternal(RunScheduledTxArgs* args) {
                                 return absl::OkStatus();
                               });
     if (!result.ok()) {
-      gpr_log(GPR_ERROR, "Failed to make binder transaction %s",
-              result.ToString().c_str());
+      LOG(ERROR) << "Failed to make binder transaction " << result;
     }
     delete args;
     return;
@@ -242,8 +238,7 @@ void WireWriterImpl::RunScheduledTxInternal(RunScheduledTxArgs* args) {
   if (CanBeSentInOneTransaction(*stream_tx->tx.get())) {  // NOLINT
     absl::Status result = RpcCallFastPath(std::move(stream_tx->tx));
     if (!result.ok()) {
-      gpr_log(GPR_ERROR, "Failed to handle non-chunked RPC call %s",
-              result.ToString().c_str());
+      LOG(ERROR) << "Failed to handle non-chunked RPC call " << result;
     }
     delete args;
     return;
@@ -256,8 +251,7 @@ void WireWriterImpl::RunScheduledTxInternal(RunScheduledTxArgs* args) {
             return RunStreamTx(stream_tx, parcel, &is_last_chunk);
           });
   if (!result.ok()) {
-    gpr_log(GPR_ERROR, "Failed to make binder transaction %s",
-            result.ToString().c_str());
+    LOG(ERROR) << "Failed to make binder transaction " << result;
   }
   if (!is_last_chunk) {
     {
@@ -290,7 +284,7 @@ absl::Status WireWriterImpl::SendAck(int64_t num_bytes) {
   // Ensure combiner will be run if this is not called from top-level gRPC API
   // entrypoint.
   grpc_core::ExecCtx exec_ctx;
-  gpr_log(GPR_INFO, "Ack %" PRId64 " bytes received", num_bytes);
+  LOG(INFO) << "Ack " << num_bytes << " bytes received";
   if (is_transacting_) {
     // This can happen because NDK might call our registered callback function
     // in the same thread while we are telling it to send a transaction
@@ -298,10 +292,8 @@ absl::Status WireWriterImpl::SendAck(int64_t num_bytes) {
     // the same thread or the other thread. We are currently in the call stack
     // of other transaction, Liveness of ACK is still guaranteed even if this is
     // a race with another thread.
-    gpr_log(
-        GPR_INFO,
-        "Scheduling ACK transaction instead of directly execute it to avoid "
-        "deadlock.");
+    LOG(INFO) << "Scheduling ACK transaction instead of directly execute it to "
+                 "avoid deadlock.";
     auto args = new RunScheduledTxArgs();
     args->writer = this;
     args->tx = RunScheduledTxArgs::AckTx();
@@ -318,8 +310,7 @@ absl::Status WireWriterImpl::SendAck(int64_t num_bytes) {
                               return absl::OkStatus();
                             });
   if (!result.ok()) {
-    gpr_log(GPR_ERROR, "Failed to make binder transaction %s",
-            result.ToString().c_str());
+    LOG(ERROR) << "Failed to make binder transaction " << result;
   }
   return result;
 }
@@ -328,7 +319,7 @@ void WireWriterImpl::OnAckReceived(int64_t num_bytes) {
   // Ensure combiner will be run if this is not called from top-level gRPC API
   // entrypoint.
   grpc_core::ExecCtx exec_ctx;
-  gpr_log(GPR_INFO, "OnAckReceived %" PRId64, num_bytes);
+  LOG(INFO) << "OnAckReceived " << num_bytes;
   // Do not try to obtain `write_mu_` in this function. NDKBinder might invoke
   // the callback to notify us about new incoming binder transaction when we are
   // sending transaction. i.e. `write_mu_` might have already been acquired by
@@ -338,10 +329,9 @@ void WireWriterImpl::OnAckReceived(int64_t num_bytes) {
     num_acknowledged_bytes_ = std::max(num_acknowledged_bytes_, num_bytes);
     int64_t num_outgoing_bytes = num_outgoing_bytes_;
     if (num_acknowledged_bytes_ > num_outgoing_bytes) {
-      gpr_log(GPR_ERROR,
-              "The other end of transport acked more bytes than we ever sent, "
-              "%" PRId64 " > %" PRId64,
-              num_acknowledged_bytes_, num_outgoing_bytes);
+      LOG(ERROR) << "The other end of transport acked more bytes than we ever "
+                    "sent, "
+                 << num_acknowledged_bytes_ << " > " << num_outgoing_bytes;
     }
   }
   TryScheduleTransaction();
@@ -371,11 +361,9 @@ void WireWriterImpl::TryScheduleTransaction() {
     int64_t num_non_acked_bytes_estimation =
         num_total_bytes_will_be_sent - num_acknowledged_bytes_;
     if (num_non_acked_bytes_estimation < 0) {
-      gpr_log(
-          GPR_ERROR,
-          "Something went wrong. `num_non_acked_bytes_estimation` should be "
-          "non-negative but it is %" PRId64,
-          num_non_acked_bytes_estimation);
+      LOG(ERROR) << "Something went wrong. `num_non_acked_bytes_estimation` "
+                    "should be non-negative but it is "
+                 << num_non_acked_bytes_estimation;
     }
     // If we can schedule another transaction (which has size estimation of
     // `kBlockSize`) without exceeding `kFlowControlWindowSize`, schedule it.
@@ -390,12 +378,12 @@ void WireWriterImpl::TryScheduleTransaction() {
       // It is common to fill `kFlowControlWindowSize` completely because
       // transactions are send at faster rate than the other end of transport
       // can handle it, so here we use `GPR_DEBUG` log level.
-      gpr_log(GPR_DEBUG,
-              "Some work cannot be scheduled yet due to slow ack from the "
-              "other end of transport. This transport might be blocked if this "
-              "number don't go down. pending_outgoing_tx_.size() = %zu "
-              "pending_outgoing_tx_.front() = %p",
-              pending_outgoing_tx_.size(), pending_outgoing_tx_.front());
+      VLOG(2) << "Some work cannot be scheduled yet due to slow ack from the "
+                 "other end of transport. This transport might be blocked if "
+                 "this number don't go down. pending_outgoing_tx_.size() = "
+              << pending_outgoing_tx_.size()
+              << " pending_outgoing_tx_.front() = "
+              << pending_outgoing_tx_.front();
       break;
     }
   }

@@ -24,6 +24,7 @@
 #include <stdint.h>
 
 #include "absl/log/check.h"
+#include "absl/log/log.h"
 #include "absl/status/statusor.h"
 #include "absl/strings/str_format.h"
 
@@ -35,6 +36,7 @@
 
 #include "src/core/channelz/channelz.h"
 #include "src/core/lib/channel/channel_args.h"
+#include "src/core/lib/gprpp/orphanable.h"
 #include "src/core/lib/gprpp/ref_counted_ptr.h"
 #include "src/core/lib/iomgr/endpoint.h"
 #include "src/core/lib/iomgr/error.h"
@@ -53,7 +55,6 @@
 #include <grpc/byte_buffer.h>
 #include <grpc/grpc.h>
 #include <grpc/support/alloc.h>
-#include <grpc/support/log.h>
 
 #include "src/core/ext/transport/chttp2/transport/chttp2_transport.h"
 #include "src/core/lib/gprpp/crash.h"
@@ -121,11 +122,13 @@ static void client_setup_transport(grpc_core::Transport* transport) {
 static void init_client() {
   grpc_core::ExecCtx exec_ctx;
   grpc_core::Transport* transport;
-  transport = grpc_create_chttp2_transport(grpc_core::ChannelArgs(),
-                                           g_ctx.ep->client, true);
+  transport = grpc_create_chttp2_transport(
+      grpc_core::ChannelArgs(),
+      grpc_core::OrphanablePtr<grpc_endpoint>(g_ctx.ep->client), true);
   client_setup_transport(transport);
   CHECK(g_ctx.client);
-  grpc_chttp2_transport_start_reading(transport, nullptr, nullptr, nullptr);
+  grpc_chttp2_transport_start_reading(transport, nullptr, nullptr, nullptr,
+                                      nullptr);
 }
 
 static void init_server() {
@@ -135,10 +138,12 @@ static void init_server() {
   g_ctx.server = grpc_server_create(nullptr, nullptr);
   grpc_server_register_completion_queue(g_ctx.server, g_ctx.cq, nullptr);
   grpc_server_start(g_ctx.server);
-  transport = grpc_create_chttp2_transport(grpc_core::ChannelArgs(),
-                                           g_ctx.ep->server, false);
+  transport = grpc_create_chttp2_transport(
+      grpc_core::ChannelArgs(),
+      grpc_core::OrphanablePtr<grpc_endpoint>(g_ctx.ep->server), false);
   server_setup_transport(transport);
-  grpc_chttp2_transport_start_reading(transport, nullptr, nullptr, nullptr);
+  grpc_chttp2_transport_start_reading(transport, nullptr, nullptr, nullptr,
+                                      nullptr);
 }
 
 static void test_init() {
@@ -225,8 +230,8 @@ static void _test_close_before_server_recv(fd_type fdtype) {
       grpc_raw_byte_buffer_create(&request_payload_slice, 1);
   grpc_byte_buffer* response_payload =
       grpc_raw_byte_buffer_create(&response_payload_slice, 1);
-  gpr_log(GPR_INFO, "Running test: test_close_%s_before_server_recv",
-          fd_type_str(fdtype));
+  LOG(INFO) << "Running test: test_close_" << fd_type_str(fdtype)
+            << "_before_server_recv";
   test_init();
 
   grpc_op ops[6];
@@ -399,8 +404,8 @@ static void _test_close_before_server_send(fd_type fdtype) {
       grpc_raw_byte_buffer_create(&request_payload_slice, 1);
   grpc_byte_buffer* response_payload =
       grpc_raw_byte_buffer_create(&response_payload_slice, 1);
-  gpr_log(GPR_INFO, "Running test: test_close_%s_before_server_send",
-          fd_type_str(fdtype));
+  LOG(INFO) << "Running test: test_close_" << fd_type_str(fdtype)
+            << "_before_server_send";
   test_init();
 
   grpc_op ops[6];
@@ -596,8 +601,8 @@ static void _test_close_before_client_send(fd_type fdtype) {
       grpc_raw_byte_buffer_create(&request_payload_slice, 1);
   grpc_byte_buffer* response_payload =
       grpc_raw_byte_buffer_create(&response_payload_slice, 1);
-  gpr_log(GPR_INFO, "Running test: test_close_%s_before_client_send",
-          fd_type_str(fdtype));
+  LOG(INFO) << "Running test: test_close_" << fd_type_str(fdtype)
+            << "_before_client_send";
   test_init();
 
   grpc_op ops[6];

@@ -39,7 +39,7 @@ then
   # Any installation step is a potential source of breakages,
   # so we are trying to perform as few download-and-install operations
   # as possible.
-  "${PYTHON}" -m pip install --upgrade 'cython<3.0.0rc1'
+  "${PYTHON}" -m pip install --upgrade 'cython<4.0.0rc1'
 fi
 
 # Allow build_ext to build C/C++ files in parallel
@@ -92,6 +92,7 @@ ancillary_package_dir=(
   "src/python/grpcio_status/"
   "src/python/grpcio_testing/"
   "src/python/grpcio_observability/"
+  "src/python/grpcio_csm_observability/"
 )
 
 # Copy license to ancillary package directories so it will be distributed.
@@ -166,7 +167,8 @@ then
   "${PYTHON}" -m pip install virtualenv
   "${PYTHON}" -m virtualenv venv || { "${PYTHON}" -m pip install virtualenv==20.0.23 && "${PYTHON}" -m virtualenv venv; }
   # Ensure the generated artifacts are valid using "twine check"
-  venv/bin/python -m pip install "twine<=2.0" "readme_renderer<40.0"
+  # pinning twine's dependency package `cryptography` version to 3.3.2 (last version without Rust dependency)
+  venv/bin/python -m pip install "cryptography==3.3.2" "twine==5.0.0" "readme_renderer<40.0"
   venv/bin/python -m twine check dist/* tools/distrib/python/grpcio_tools/dist/*
   if [ "$GRPC_BUILD_MAC" == "" ]; then
     venv/bin/python -m twine check src/python/grpcio_observability/dist/*
@@ -240,6 +242,13 @@ if [ "$GRPC_BUILD_MAC" == "" ]; then
     cp -r src/python/grpcio_observability/dist/*.whl "$ARTIFACT_DIR"
   fi
   cp -r src/python/grpcio_observability/dist/*.tar.gz "$ARTIFACT_DIR"
+
+  # Build grpcio_csm_observability distribution
+  if [ "$GRPC_BUILD_MAC" == "" ]; then
+    ${SETARCH_CMD} "${PYTHON}" src/python/grpcio_csm_observability/setup.py \
+        sdist bdist_wheel
+    cp -r src/python/grpcio_csm_observability/dist/* "$ARTIFACT_DIR"
+  fi
 fi
 
 # We need to use the built grpcio-tools/grpcio to compile the health proto
@@ -252,6 +261,7 @@ then
 
   if [ "$("$PYTHON" -c "import sys; print(sys.version_info[0])")" == "2" ]
   then
+    # shellcheck disable=SC2261
     "${PYTHON}" -m pip install futures>=2.2.0 enum34>=1.0.4
   fi
 

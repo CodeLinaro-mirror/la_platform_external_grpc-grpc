@@ -28,7 +28,6 @@
 #include <grpc/support/port_platform.h>
 
 #include "src/core/lib/channel/channel_args.h"
-#include "src/core/lib/channel/context.h"
 #include "src/core/lib/channel/promise_based_filter.h"
 #include "src/core/lib/event_engine/event_engine_context.h"
 #include "src/core/lib/gprpp/ref_counted_ptr.h"
@@ -56,6 +55,10 @@ class ServerConfigSelectorFilter final
       RefCountedPtr<ServerConfigSelectorProvider>
           server_config_selector_provider);
 
+  static absl::string_view TypeName() {
+    return "server_config_selector_filter";
+  }
+
   ServerConfigSelectorFilter(const ServerConfigSelectorFilter&) = delete;
   ServerConfigSelectorFilter& operator=(const ServerConfigSelectorFilter&) =
       delete;
@@ -72,6 +75,7 @@ class ServerConfigSelectorFilter final
     static const NoInterceptor OnServerInitialMetadata;
     static const NoInterceptor OnServerTrailingMetadata;
     static const NoInterceptor OnClientToServerMessage;
+    static const NoInterceptor OnClientToServerHalfClose;
     static const NoInterceptor OnServerToClientMessage;
     static const NoInterceptor OnFinalize;
   };
@@ -148,8 +152,7 @@ absl::Status ServerConfigSelectorFilter::Call::OnClientInitialMetadata(
     return absl::UnavailableError(StatusToString(call_config.status()));
   }
   auto* service_config_call_data =
-      GetContext<Arena>()->New<ServiceConfigCallData>(
-          GetContext<Arena>(), GetContext<grpc_call_context_element>());
+      GetContext<Arena>()->New<ServiceConfigCallData>(GetContext<Arena>());
   service_config_call_data->SetServiceConfig(
       std::move(call_config->service_config), call_config->method_configs);
   return absl::OkStatus();
@@ -158,13 +161,14 @@ absl::Status ServerConfigSelectorFilter::Call::OnClientInitialMetadata(
 const NoInterceptor ServerConfigSelectorFilter::Call::OnServerInitialMetadata;
 const NoInterceptor ServerConfigSelectorFilter::Call::OnServerTrailingMetadata;
 const NoInterceptor ServerConfigSelectorFilter::Call::OnClientToServerMessage;
+const NoInterceptor ServerConfigSelectorFilter::Call::OnClientToServerHalfClose;
 const NoInterceptor ServerConfigSelectorFilter::Call::OnServerToClientMessage;
 const NoInterceptor ServerConfigSelectorFilter::Call::OnFinalize;
 
 }  // namespace
 
 const grpc_channel_filter kServerConfigSelectorFilter =
-    MakePromiseBasedFilter<ServerConfigSelectorFilter, FilterEndpoint::kServer>(
-        "server_config_selector_filter");
+    MakePromiseBasedFilter<ServerConfigSelectorFilter,
+                           FilterEndpoint::kServer>();
 
 }  // namespace grpc_core

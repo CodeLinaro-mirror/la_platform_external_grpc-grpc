@@ -40,6 +40,7 @@ namespace grpc_core {
 const NoInterceptor ClientAuthorityFilter::Call::OnServerInitialMetadata;
 const NoInterceptor ClientAuthorityFilter::Call::OnServerTrailingMetadata;
 const NoInterceptor ClientAuthorityFilter::Call::OnClientToServerMessage;
+const NoInterceptor ClientAuthorityFilter::Call::OnClientToServerHalfClose;
 const NoInterceptor ClientAuthorityFilter::Call::OnServerToClientMessage;
 const NoInterceptor ClientAuthorityFilter::Call::OnFinalize;
 
@@ -65,8 +66,7 @@ void ClientAuthorityFilter::Call::OnClientInitialMetadata(
 }
 
 const grpc_channel_filter ClientAuthorityFilter::kFilter =
-    MakePromiseBasedFilter<ClientAuthorityFilter, FilterEndpoint::kClient>(
-        "authority");
+    MakePromiseBasedFilter<ClientAuthorityFilter, FilterEndpoint::kClient>();
 
 namespace {
 bool NeedsClientAuthorityFilter(const ChannelArgs& args) {

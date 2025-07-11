@@ -14,7 +14,7 @@
 
 #include "gmock/gmock.h"
 
-#include "test/core/transport/test_suite/test.h"
+#include "test/core/transport/test_suite/transport_test.h"
 
 using testing::UnorderedElementsAreArray;
 
@@ -62,13 +62,13 @@ void FillMetadata(const std::vector<std::pair<std::string, std::string>>& md,
 }  // namespace
 
 TRANSPORT_TEST(UnaryWithSomeContent) {
-  SetServerAcceptor();
+  SetServerCallDestination();
   const auto client_initial_metadata = RandomMetadata();
   const auto server_initial_metadata = RandomMetadata();
   const auto server_trailing_metadata = RandomMetadata();
   const auto client_payload = RandomMessage();
   const auto server_payload = RandomMessage();
-  auto md = Arena::MakePooled<ClientMetadata>();
+  auto md = Arena::MakePooledForOverwrite<ClientMetadata>();
   FillMetadata(client_initial_metadata, *md);
   auto initiator = CreateCall(std::move(md));
   SpawnTestSeq(
@@ -126,7 +126,7 @@ TRANSPORT_TEST(UnaryWithSomeContent) {
       [&](ValueOrFailure<absl::optional<MessageHandle>> msg) {
         EXPECT_TRUE(msg.ok());
         EXPECT_FALSE(msg.value().has_value());
-        auto md = Arena::MakePooled<ServerMetadata>();
+        auto md = Arena::MakePooledForOverwrite<ServerMetadata>();
         FillMetadata(server_initial_metadata, *md);
         return handler.PushServerInitialMetadata(std::move(md));
       },
@@ -137,7 +137,7 @@ TRANSPORT_TEST(UnaryWithSomeContent) {
       },
       [&](StatusFlag result) mutable {
         EXPECT_TRUE(result.ok());
-        auto md = Arena::MakePooled<ServerMetadata>();
+        auto md = Arena::MakePooledForOverwrite<ServerMetadata>();
         FillMetadata(server_trailing_metadata, *md);
         handler.PushServerTrailingMetadata(std::move(md));
         return Empty{};
