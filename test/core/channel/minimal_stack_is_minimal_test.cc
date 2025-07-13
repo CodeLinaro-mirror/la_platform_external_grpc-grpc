@@ -74,7 +74,6 @@ class FakeTransport final : public grpc_core::Transport {
   void SetPollset(grpc_stream*, grpc_pollset*) override {}
   void SetPollsetSet(grpc_stream*, grpc_pollset_set*) override {}
   void PerformOp(grpc_transport_op*) override {}
-  grpc_endpoint* GetEndpoint() override { return nullptr; }
   void Orphan() override {}
 
  private:
@@ -102,9 +101,7 @@ std::vector<std::string> MakeStack(const char* transport_name,
 
   std::vector<std::string> parts;
   for (const auto& entry : *builder.mutable_stack()) {
-    const char* name = entry->name;
-    if (name == nullptr) continue;
-    parts.push_back(name);
+    parts.push_back(std::string(entry->name.name()));
   }
 
   return parts;

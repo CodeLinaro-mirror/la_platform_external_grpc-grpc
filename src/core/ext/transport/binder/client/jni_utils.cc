@@ -15,12 +15,11 @@
 #include "src/core/ext/transport/binder/client/jni_utils.h"
 
 #include "absl/log/check.h"
+#include "absl/log/log.h"
 
 #include <grpc/support/port_platform.h>
 
 #ifndef GRPC_NO_BINDER
-
-#include <grpc/support/log.h>
 
 #include "src/core/lib/gprpp/crash.h"
 
@@ -55,13 +54,13 @@ jclass FindNativeConnectionHelper(
   //   from JNI_OnLoad
   //   * The APK does not correctly depends on the helper class, or the
   //   class get shrinked
-  gpr_log(GPR_ERROR,
-          "Cannot find binder transport Java helper class. Did you invoke "
-          "grpc::experimental::InitializeBinderChannelJavaClass correctly "
-          "beforehand? Did the APK correctly include the connection helper "
-          "class (i.e depends on build target "
-          "src/core/ext/transport/binder/java/io/grpc/binder/"
-          "cpp:connection_helper) ?");
+  LOG(ERROR)
+      << "Cannot find binder transport Java helper class. Did you invoke "
+         "grpc::experimental::InitializeBinderChannelJavaClass correctly "
+         "beforehand? Did the APK correctly include the connection helper "
+         "class (i.e depends on build target "
+         "src/core/ext/transport/binder/java/io/grpc/binder/"
+         "cpp:connection_helper) ?";
   // TODO(mingcl): Maybe it is worth to try again so the failure can be fixed
   // by invoking this function again at a different thread.
   return nullptr;
@@ -83,7 +82,7 @@ void TryEstablishConnection(JNIEnv* env, jobject application,
 
   jmethodID mid = env->GetStaticMethodID(cl, method.c_str(), type.c_str());
   if (mid == nullptr) {
-    gpr_log(GPR_ERROR, "No method id %s", method.c_str());
+    LOG(ERROR) << "No method id " << method;
   }
 
   env->CallStaticVoidMethod(cl, mid, application,
@@ -107,7 +106,7 @@ void TryEstablishConnectionWithUri(JNIEnv* env, jobject application,
 
   jmethodID mid = env->GetStaticMethodID(cl, method.c_str(), type.c_str());
   if (mid == nullptr) {
-    gpr_log(GPR_ERROR, "No method id %s", method.c_str());
+    LOG(ERROR) << "No method id " << method;
   }
 
   env->CallStaticVoidMethod(cl, mid, application,
@@ -126,7 +125,7 @@ bool IsSignatureMatch(JNIEnv* env, jobject context, int uid1, int uid2) {
 
   jmethodID mid = env->GetStaticMethodID(cl, method.c_str(), type.c_str());
   if (mid == nullptr) {
-    gpr_log(GPR_ERROR, "No method id %s", method.c_str());
+    LOG(ERROR) << "No method id " << method;
   }
 
   jboolean result = env->CallStaticBooleanMethod(cl, mid, context, uid1, uid2);

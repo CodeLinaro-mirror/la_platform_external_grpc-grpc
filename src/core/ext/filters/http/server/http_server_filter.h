@@ -36,6 +36,8 @@ class HttpServerFilter : public ImplementChannelFilter<HttpServerFilter> {
  public:
   static const grpc_channel_filter kFilter;
 
+  static absl::string_view TypeName() { return "http-server"; }
+
   static absl::StatusOr<std::unique_ptr<HttpServerFilter>> Create(
       const ChannelArgs& args, ChannelFilter::Args filter_args);
 
@@ -50,6 +52,7 @@ class HttpServerFilter : public ImplementChannelFilter<HttpServerFilter> {
     void OnServerInitialMetadata(ServerMetadata& md);
     void OnServerTrailingMetadata(ServerMetadata& md);
     static const NoInterceptor OnClientToServerMessage;
+    static const NoInterceptor OnClientToServerHalfClose;
     static const NoInterceptor OnServerToClientMessage;
     static const NoInterceptor OnFinalize;
   };

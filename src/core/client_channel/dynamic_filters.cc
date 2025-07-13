@@ -24,6 +24,7 @@
 #include <utility>
 
 #include "absl/log/check.h"
+#include "absl/log/log.h"
 #include "absl/status/statusor.h"
 
 #include <grpc/support/log.h>
@@ -32,10 +33,10 @@
 #include "src/core/lib/channel/channel_stack.h"
 #include "src/core/lib/channel/channel_stack_builder_impl.h"
 #include "src/core/lib/debug/trace.h"
-#include "src/core/lib/gpr/alloc.h"
 #include "src/core/lib/gprpp/status_helper.h"
 #include "src/core/lib/surface/channel_stack_type.h"
 #include "src/core/lib/surface/lame_client.h"
+#include "src/core/util/alloc.h"
 
 // Conversion between call and call stack.
 #define CALL_TO_CALL_STACK(call)                                     \
@@ -58,7 +59,6 @@ DynamicFilters::Call::Call(Args args, grpc_error_handle* error)
   const grpc_call_element_args call_args = {
       call_stack,         // call_stack
       nullptr,            // server_transport_data
-      args.context,       // context
       args.path,          // path
       args.start_time,    // start_time
       args.deadline,      // deadline
@@ -68,7 +68,7 @@ DynamicFilters::Call::Call(Args args, grpc_error_handle* error)
   *error = grpc_call_stack_init(channel_stack_->channel_stack_.get(), 1,
                                 Destroy, this, &call_args);
   if (GPR_UNLIKELY(!error->ok())) {
-    gpr_log(GPR_ERROR, "error: %s", StatusToString(*error).c_str());
+    LOG(ERROR) << "error: " << StatusToString(*error);
     return;
   }
   grpc_call_stack_set_pollset_or_pollset_set(call_stack, args.pollent);
@@ -78,7 +78,9 @@ void DynamicFilters::Call::StartTransportStreamOpBatch(
     grpc_transport_stream_op_batch* batch) {
   grpc_call_stack* call_stack = CALL_TO_CALL_STACK(this);
   grpc_call_element* top_elem = grpc_call_stack_element(call_stack, 0);
-  GRPC_CALL_LOG_OP(GPR_INFO, top_elem, batch);
+  GRPC_TRACE_LOG(channel, INFO)
+      << "OP[" << top_elem->filter->name << ":" << top_elem
+      << "]: " << grpc_transport_stream_op_batch_string(batch, false);
   top_elem->filter->start_transport_stream_op_batch(top_elem, batch);
 }
 

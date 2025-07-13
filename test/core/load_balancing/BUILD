@@ -18,6 +18,7 @@ load(
     "grpc_cc_test",
     "grpc_package",
 )
+load("//test/cpp/microbenchmarks:grpc_benchmark_config.bzl", "grpc_cc_benchmark")
 
 grpc_package(name = "test/core/load_balancing")
 
@@ -29,6 +30,7 @@ grpc_cc_library(
     hdrs = ["lb_policy_test_lib.h"],
     external_deps = [
         "absl/log:check",
+        "absl/log:log",
         "gtest",
     ],
     language = "C++",
@@ -104,7 +106,10 @@ grpc_cc_test(
 grpc_cc_test(
     name = "outlier_detection_test",
     srcs = ["outlier_detection_test.cc"],
-    external_deps = ["gtest"],
+    external_deps = [
+        "absl/log:log",
+        "gtest",
+    ],
     language = "C++",
     tags = [
         "lb_unit_test",
@@ -140,7 +145,10 @@ grpc_cc_test(
 grpc_cc_test(
     name = "xds_override_host_test",
     srcs = ["xds_override_host_test.cc"],
-    external_deps = ["gtest"],
+    external_deps = [
+        "absl/log:log",
+        "gtest",
+    ],
     language = "C++",
     tags = [
         "lb_unit_test",
@@ -150,6 +158,7 @@ grpc_cc_test(
     deps = [
         ":lb_policy_test_lib",
         "//src/core:grpc_lb_policy_xds_override_host",
+        "//src/core:xds_health_status",
         "//test/core/test_util:grpc_test_util",
     ],
 )
@@ -187,21 +196,14 @@ grpc_cc_test(
     ],
 )
 
-grpc_cc_test(
+grpc_cc_benchmark(
     name = "static_stride_scheduler_benchmark",
     srcs = ["static_stride_scheduler_benchmark.cc"],
     external_deps = [
         "absl/algorithm:container",
         "absl/log:check",
-        "benchmark",
-    ],
-    language = "C++",
-    tags = [
-        "no_mac",
-        "no_windows",
     ],
     uses_event_engine = False,
-    uses_polling = False,
     deps = [
         "//src/core:no_destruct",
         "//src/core:static_stride_scheduler",
@@ -230,7 +232,10 @@ grpc_cc_test(
 grpc_cc_test(
     name = "weighted_round_robin_test",
     srcs = ["weighted_round_robin_test.cc"],
-    external_deps = ["gtest"],
+    external_deps = [
+        "absl/log:log",
+        "gtest",
+    ],
     language = "C++",
     tags = [
         "lb_unit_test",

@@ -528,6 +528,14 @@ struct WaitForReady {
   static std::string DisplayValue(ValueType x);
 };
 
+// Annotation added by retry code to indicate a transparent retry.
+struct IsTransparentRetry {
+  static absl::string_view DebugKey() { return "IsTransparentRetry"; }
+  static constexpr bool kRepeatable = false;
+  using ValueType = bool;
+  static std::string DisplayValue(ValueType x) { return x ? "true" : "false"; }
+};
+
 // Annotation added by a transport to note that server trailing metadata
 // is a Trailers-Only response.
 struct GrpcTrailersOnly {
@@ -1314,6 +1322,11 @@ class MetadataMap {
     return builder.TakeOutput();
   }
 
+  template <typename Sink>
+  friend void AbslStringify(Sink& sink, const MetadataMap& map) {
+    sink.Append(map.DebugString());
+  }
+
   // Get the pointer to the value of some known metadata.
   // Returns nullptr if the metadata is not present.
   // Causes a compilation error if Which is not an element of Traits.
@@ -1536,7 +1549,8 @@ using grpc_metadata_batch_base = grpc_core::MetadataMap<
     grpc_core::GrpcStreamNetworkState, grpc_core::PeerString,
     grpc_core::GrpcStatusContext, grpc_core::GrpcStatusFromWire,
     grpc_core::GrpcCallWasCancelled, grpc_core::WaitForReady,
-    grpc_core::GrpcTrailersOnly, grpc_core::GrpcTarPit,
+    grpc_core::IsTransparentRetry, grpc_core::GrpcTrailersOnly,
+    grpc_core::GrpcTarPit,
     grpc_core::GrpcRegisteredMethod GRPC_CUSTOM_CLIENT_METADATA
         GRPC_CUSTOM_SERVER_METADATA>;
 

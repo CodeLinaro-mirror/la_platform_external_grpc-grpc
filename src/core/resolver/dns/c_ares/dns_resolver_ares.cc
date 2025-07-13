@@ -24,6 +24,7 @@
 #include <vector>
 
 #include "absl/base/thread_annotations.h"
+#include "absl/log/log.h"
 #include "absl/status/status.h"
 #include "absl/status/statusor.h"
 #include "absl/strings/match.h"
@@ -204,7 +205,7 @@ AresClientChannelDNSResolver::AresClientChannelDNSResolver(
                           .set_jitter(GRPC_DNS_RECONNECT_JITTER)
                           .set_max_backoff(Duration::Milliseconds(
                               GRPC_DNS_RECONNECT_MAX_BACKOFF_SECONDS * 1000)),
-                      &grpc_trace_cares_resolver),
+                      &cares_resolver_trace),
       request_service_config_(
           !channel_args()
                .GetBool(GRPC_ARG_SERVICE_CONFIG_DISABLE_RESOLUTION)
@@ -348,7 +349,7 @@ class AresClientChannelDNSResolverFactory final : public ResolverFactory {
 
   bool IsValidUri(const URI& uri) const override {
     if (absl::StripPrefix(uri.path(), "/").empty()) {
-      gpr_log(GPR_ERROR, "no server name supplied in dns URI");
+      LOG(ERROR) << "no server name supplied in dns URI";
       return false;
     }
     return true;
@@ -742,6 +743,13 @@ void grpc_resolver_dns_ares_shutdown() {
   }
 }
 
+void grpc_resolver_dns_ares_reset_dns_resolver() {
+  if (grpc_core::ShouldUseAresDnsResolver(
+          grpc_core::ConfigVars::Get().DnsResolver())) {
+    grpc_core::ResetDNSResolver(std::make_unique<grpc_core::AresDNSResolver>());
+  }
+}
+
 #else  // GRPC_ARES == 1
 
 namespace grpc_core {
@@ -754,5 +762,7 @@ void RegisterAresDnsResolver(CoreConfiguration::Builder*) {}
 void grpc_resolver_dns_ares_init() {}
 
 void grpc_resolver_dns_ares_shutdown() {}
+
+void grpc_resolver_dns_ares_reset_dns_resolver() {}
 
 #endif  // GRPC_ARES == 1

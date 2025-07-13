@@ -45,6 +45,8 @@ class FaultInjectionFilter
  public:
   static const grpc_channel_filter kFilter;
 
+  static absl::string_view TypeName() { return "fault_injection_filter"; }
+
   static absl::StatusOr<std::unique_ptr<FaultInjectionFilter>> Create(
       const ChannelArgs& args, ChannelFilter::Args filter_args);
 
@@ -58,6 +60,7 @@ class FaultInjectionFilter
     static const NoInterceptor OnServerInitialMetadata;
     static const NoInterceptor OnServerTrailingMetadata;
     static const NoInterceptor OnClientToServerMessage;
+    static const NoInterceptor OnClientToServerHalfClose;
     static const NoInterceptor OnServerToClientMessage;
     static const NoInterceptor OnFinalize;
   };

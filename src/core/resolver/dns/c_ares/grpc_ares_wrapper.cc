@@ -47,20 +47,19 @@
 #include <ares.h>
 
 #include "absl/log/check.h"
+#include "absl/log/log.h"
 #include "absl/status/status.h"
 #include "absl/status/statusor.h"
 #include "absl/strings/str_cat.h"
 #include "absl/strings/str_format.h"
 
 #include <grpc/support/alloc.h>
-#include <grpc/support/log.h>
 #include <grpc/support/string_util.h>
 #include <grpc/support/sync.h>
 
 #include "src/core/lib/address_utils/parse_address.h"
 #include "src/core/lib/address_utils/sockaddr_utils.h"
 #include "src/core/lib/channel/channel_args.h"
-#include "src/core/lib/gpr/string.h"
 #include "src/core/lib/gprpp/debug_location.h"
 #include "src/core/lib/gprpp/host_port.h"
 #include "src/core/lib/gprpp/time.h"
@@ -71,14 +70,10 @@
 #include "src/core/lib/iomgr/timer.h"
 #include "src/core/resolver/dns/c_ares/grpc_ares_ev_driver.h"
 #include "src/core/resolver/dns/c_ares/grpc_ares_wrapper.h"
+#include "src/core/util/string.h"
 
 using grpc_core::EndpointAddresses;
 using grpc_core::EndpointAddressesList;
-
-grpc_core::TraceFlag grpc_trace_cares_address_sorting(false,
-                                                      "cares_address_sorting");
-
-grpc_core::TraceFlag grpc_trace_cares_resolver(false, "cares_resolver");
 
 typedef struct fd_node {
   // default constructor exists only for linked list manipulation
@@ -560,18 +555,17 @@ static void log_address_sorting_list(const grpc_ares_request* r,
                                      const char* input_output_str) {
   for (size_t i = 0; i < addresses.size(); i++) {
     auto addr_str = grpc_sockaddr_to_string(&addresses[i].address(), true);
-    gpr_log(GPR_INFO,
-            "(c-ares resolver) request:%p c-ares address sorting: %s[%" PRIuPTR
-            "]=%s",
-            r, input_output_str, i,
-            addr_str.ok() ? addr_str->c_str()
-                          : addr_str.status().ToString().c_str());
+    LOG(INFO) << "(c-ares resolver) request:" << r
+              << " c-ares address sorting: " << input_output_str << "[" << i
+              << "]="
+              << (addr_str.ok() ? addr_str->c_str()
+                                : addr_str.status().ToString().c_str());
   }
 }
 
 void grpc_cares_wrapper_address_sorting_sort(const grpc_ares_request* r,
                                              EndpointAddressesList* addresses) {
-  if (GRPC_TRACE_FLAG_ENABLED(grpc_trace_cares_address_sorting)) {
+  if (GRPC_TRACE_FLAG_ENABLED(cares_address_sorting)) {
     log_address_sorting_list(r, *addresses, "input");
   }
   address_sorting_sortable* sortables = static_cast<address_sorting_sortable*>(
@@ -591,7 +585,7 @@ void grpc_cares_wrapper_address_sorting_sort(const grpc_ares_request* r,
   }
   gpr_free(sortables);
   *addresses = std::move(sorted);
-  if (GRPC_TRACE_FLAG_ENABLED(grpc_trace_cares_address_sorting)) {
+  if (GRPC_TRACE_FLAG_ENABLED(cares_address_sorting)) {
     log_address_sorting_list(r, *addresses, "output");
   }
 }
@@ -883,14 +877,11 @@ grpc_error_handle grpc_dns_lookup_ares_continued(
   grpc_core::SplitHostPort(name, host, port);
   if (host->empty()) {
     error =
-        grpc_error_set_str(GRPC_ERROR_CREATE("unparseable host:port"),
-                           grpc_core::StatusStrProperty::kTargetAddress, name);
+        GRPC_ERROR_CREATE(absl::StrCat("unparseable host:port \"", name, "\""));
     return error;
   } else if (check_port && port->empty()) {
     if (default_port == nullptr || strlen(default_port) == 0) {
-      error = grpc_error_set_str(GRPC_ERROR_CREATE("no port in name"),
-                                 grpc_core::StatusStrProperty::kTargetAddress,
-                                 name);
+      error = GRPC_ERROR_CREATE(absl::StrCat("no port in name \"", name, "\""));
       return error;
     }
     *port = default_port;
@@ -908,18 +899,14 @@ static bool inner_resolve_as_ip_literal_locked(
     std::unique_ptr<grpc_core::EndpointAddressesList>* addrs, std::string* host,
     std::string* port, std::string* hostport) {
   if (!grpc_core::SplitHostPort(name, host, port)) {
-    gpr_log(GPR_ERROR,
-            "Failed to parse %s to host:port while attempting to resolve as ip "
-            "literal.",
-            name);
+    LOG(ERROR) << "Failed to parse " << name
+               << " to host:port while attempting to resolve as ip literal.";
     return false;
   }
   if (port->empty()) {
     if (default_port == nullptr || strlen(default_port) == 0) {
-      gpr_log(GPR_ERROR,
-              "No port or default port for %s while attempting to resolve as "
-              "ip literal.",
-              name);
+      LOG(ERROR) << "No port or default port for " << name
+                 << " while attempting to resolve as ip literal.";
       return false;
     }
     *port = default_port;
@@ -952,7 +939,7 @@ static bool resolve_as_ip_literal_locked(
 static bool target_matches_localhost_inner(const char* name, std::string* host,
                                            std::string* port) {
   if (!grpc_core::SplitHostPort(name, host, port)) {
-    gpr_log(GPR_ERROR, "Unable to split host and port for name: %s", name);
+    LOG(ERROR) << "Unable to split host and port for name: " << name;
     return false;
   }
   return gpr_stricmp(host->c_str(), "localhost") == 0;
@@ -971,18 +958,14 @@ static bool inner_maybe_resolve_localhost_manually_locked(
     std::string* port) {
   grpc_core::SplitHostPort(name, host, port);
   if (host->empty()) {
-    gpr_log(GPR_ERROR,
-            "Failed to parse %s into host:port during manual localhost "
-            "resolution check.",
-            name);
+    LOG(ERROR) << "Failed to parse " << name
+               << " into host:port during manual localhost resolution check.";
     return false;
   }
   if (port->empty()) {
     if (default_port == nullptr || strlen(default_port) == 0) {
-      gpr_log(GPR_ERROR,
-              "No port or default port for %s during manual localhost "
-              "resolution check.",
-              name);
+      LOG(ERROR) << "No port or default port for " << name
+                 << " during manual localhost resolution check.";
       return false;
     }
     *port = default_port;

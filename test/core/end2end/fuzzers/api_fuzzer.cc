@@ -69,6 +69,7 @@
 #include "test/core/event_engine/fuzzing_event_engine/fuzzing_event_engine.pb.h"
 #include "test/core/test_util/fuzz_config_vars.h"
 #include "test/core/test_util/fuzzing_channel_args.h"
+#include "test/core/test_util/test_config.h"
 
 // IWYU pragma: no_include <google/protobuf/repeated_ptr_field.h>
 
@@ -77,8 +78,6 @@
 
 bool squelch = true;
 bool leak_check = true;
-
-static void dont_log(gpr_log_func_args* /*args*/) {}
 
 ////////////////////////////////////////////////////////////////////////////////
 // dns resolution
@@ -213,7 +212,7 @@ class FuzzerDNSResolver : public grpc_core::DNSResolver {
 
 }  // namespace
 
-grpc_ares_request* my_dns_lookup_ares(
+grpc_ares_request* my_dns_lookup_hostname_ares(
     const char* /*dns_server*/, const char* addr, const char* /*default_port*/,
     grpc_pollset_set* /*interested_parties*/, grpc_closure* on_done,
     std::unique_ptr<grpc_core::EndpointAddressesList>* addresses,
@@ -230,8 +229,25 @@ grpc_ares_request* my_dns_lookup_ares(
   return nullptr;
 }
 
+grpc_ares_request* my_dns_lookup_srv_ares(
+    const char* /*dns_server*/, const char* name,
+    grpc_pollset_set* /*interested_parties*/, grpc_closure* on_done,
+    std::unique_ptr<grpc_core::EndpointAddressesList>* balancer_addresses,
+    int /*query_timeout*/) {
+  addr_req r;
+  r.addr = gpr_strdup(name);
+  r.on_done = on_done;
+  r.addresses = balancer_addresses;
+  GetDefaultEventEngine()->RunAfter(grpc_core::Duration::Seconds(1), [r] {
+    grpc_core::ApplicationCallbackExecCtx callback_exec_ctx;
+    grpc_core::ExecCtx exec_ctx;
+    finish_resolve(r);
+  });
+  return nullptr;
+}
+
 static void my_cancel_ares_request(grpc_ares_request* request) {
-  CHECK_EQ(request, nullptr);
+  CHECK_NE(request, nullptr);
 }
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -400,8 +416,9 @@ namespace testing {
 
 ApiFuzzer::ApiFuzzer(const fuzzing_event_engine::Actions& actions)
     : BasicFuzzer(actions) {
-  ResetDNSResolver(std::make_unique<FuzzerDNSResolver>(engine()));
-  grpc_dns_lookup_hostname_ares = my_dns_lookup_ares;
+  ResetDNSResolver(std::make_unique<FuzzerDNSResolver>(engine().get()));
+  grpc_dns_lookup_hostname_ares = my_dns_lookup_hostname_ares;
+  grpc_dns_lookup_srv_ares = my_dns_lookup_srv_ares;
   grpc_cancel_ares_request = my_cancel_ares_request;
 
   CHECK_EQ(channel_, nullptr);
@@ -506,7 +523,7 @@ using grpc_core::testing::ApiFuzzer;
 
 DEFINE_PROTO_FUZZER(const api_fuzzer::Msg& msg) {
   if (squelch && !grpc_core::GetEnv("GRPC_TRACE_FUZZER").has_value()) {
-    gpr_set_log_function(dont_log);
+    grpc_disable_all_absl_logs();
   }
   grpc_core::ApplyFuzzConfigVars(msg.config_vars());
   grpc_core::TestOnlyReloadExperimentsFromConfigVariables();

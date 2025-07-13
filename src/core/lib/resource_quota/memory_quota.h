@@ -29,17 +29,16 @@
 #include "absl/base/thread_annotations.h"
 #include "absl/container/flat_hash_set.h"
 #include "absl/log/check.h"
+#include "absl/log/log.h"
 #include "absl/strings/string_view.h"
 #include "absl/types/optional.h"
 
 #include <grpc/event_engine/memory_allocator.h>
 #include <grpc/event_engine/memory_request.h>
-#include <grpc/support/log.h>
 #include <grpc/support/port_platform.h>
 
 #include "src/core/lib/debug/trace.h"
 #include "src/core/lib/experiments/experiments.h"
-#include "src/core/lib/gpr/useful.h"
 #include "src/core/lib/gprpp/orphanable.h"
 #include "src/core/lib/gprpp/ref_counted_ptr.h"
 #include "src/core/lib/gprpp/sync.h"
@@ -47,7 +46,7 @@
 #include "src/core/lib/promise/activity.h"
 #include "src/core/lib/promise/poll.h"
 #include "src/core/lib/resource_quota/periodic_update.h"
-#include "src/core/lib/resource_quota/trace.h"
+#include "src/core/util/useful.h"
 
 namespace grpc_core {
 
@@ -426,8 +425,9 @@ class GrpcMemoryAllocatorImpl final : public EventEngineMemoryAllocatorImpl {
   void ReturnFree() {
     size_t ret = free_bytes_.exchange(0, std::memory_order_acq_rel);
     if (ret == 0) return;
-    if (GRPC_TRACE_FLAG_ENABLED(grpc_resource_quota_trace)) {
-      gpr_log(GPR_INFO, "Allocator %p returning %zu bytes to quota", this, ret);
+    if (GRPC_TRACE_FLAG_ENABLED(resource_quota)) {
+      LOG(INFO) << "Allocator " << this << " returning " << ret
+                << " bytes to quota";
     }
     taken_bytes_.fetch_sub(ret, std::memory_order_relaxed);
     memory_quota_->Return(ret);

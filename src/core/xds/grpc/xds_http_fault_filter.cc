@@ -41,11 +41,12 @@
 #include "src/core/lib/channel/status_util.h"
 #include "src/core/lib/gprpp/time.h"
 #include "src/core/lib/gprpp/validation_errors.h"
-#include "src/core/lib/json/json.h"
-#include "src/core/lib/json/json_writer.h"
 #include "src/core/lib/transport/status_conversion.h"
+#include "src/core/util/json/json.h"
+#include "src/core/util/json/json_writer.h"
 #include "src/core/xds/grpc/xds_common_types.h"
-#include "src/core/xds/grpc/xds_http_filters.h"
+#include "src/core/xds/grpc/xds_common_types_parser.h"
+#include "src/core/xds/grpc/xds_http_filter.h"
 
 namespace grpc_core {
 
@@ -212,6 +213,10 @@ XdsHttpFaultFilter::GenerateFilterConfigOverride(
   // HTTPFault filter has the same message type in HTTP connection manager's
   // filter config and in overriding filter config field.
   return GenerateFilterConfig(context, std::move(extension), errors);
+}
+
+void XdsHttpFaultFilter::AddFilter(InterceptionChainBuilder& builder) const {
+  builder.Add<FaultInjectionFilter>();
 }
 
 const grpc_channel_filter* XdsHttpFaultFilter::channel_filter() const {
