@@ -19,9 +19,11 @@
 #ifndef GRPC_TEST_CORE_TEST_UTIL_CMDLINE_H
 #define GRPC_TEST_CORE_TEST_UTIL_CMDLINE_H
 
+#include <grpc/support/port_platform.h>
+
 #include <string>
 
-#include <grpc/support/port_platform.h>
+#include "absl/log/log.h"
 
 /// Simple command line parser.
 
@@ -43,7 +45,7 @@
 ///  gpr_cmdline_destroy(cl);
 
 ///  if (verbose) {
-///    gpr_log(GPR_INFO, "Goodbye cruel world!");
+///    LOG(INFO) << "Goodbye cruel world!";
 ///  }
 
 ///  return 0;

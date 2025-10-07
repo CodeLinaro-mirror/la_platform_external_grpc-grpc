@@ -18,17 +18,16 @@
 
 #include "src/core/server/xds_channel_stack_modifier.h"
 
+#include <grpc/grpc.h>
+
 #include <algorithm>
 #include <string>
 
 #include "gtest/gtest.h"
-
-#include <grpc/grpc.h>
-
+#include "src/core/config/core_configuration.h"
 #include "src/core/lib/channel/channel_args.h"
 #include "src/core/lib/channel/channel_stack.h"
 #include "src/core/lib/channel/channel_stack_builder_impl.h"
-#include "src/core/lib/config/core_configuration.h"
 #include "src/core/lib/iomgr/endpoint.h"
 #include "src/core/lib/iomgr/exec_ctx.h"
 #include "src/core/lib/iomgr/iomgr_fwd.h"
@@ -70,8 +69,8 @@ TEST(XdsChannelStackModifierTest, ChannelArgsCompare) {
   grpc_shutdown();
 }
 
-constexpr char kTestFilter1[] = "test_filter_1";
-constexpr char kTestFilter2[] = "test_filter_2";
+const UniqueTypeName kTestFilter1 = GRPC_UNIQUE_TYPE_NAME_HERE("test_filter_1");
+const UniqueTypeName kTestFilter2 = GRPC_UNIQUE_TYPE_NAME_HERE("test_filter_2");
 
 namespace {
 class FakeTransport final : public Transport {
@@ -84,7 +83,6 @@ class FakeTransport final : public Transport {
   void SetPollset(grpc_stream*, grpc_pollset*) override {}
   void SetPollsetSet(grpc_stream*, grpc_pollset_set*) override {}
   void PerformOp(grpc_transport_op*) override {}
-  grpc_endpoint* GetEndpoint() override { return nullptr; }
   void Orphan() override {}
 };
 }  // namespace
@@ -95,11 +93,11 @@ TEST(XdsChannelStackModifierTest, XdsHttpFiltersInsertion) {
   grpc_init();
   // Add 2 test filters to XdsChannelStackModifier
   const grpc_channel_filter test_filter_1 = {
-      nullptr, nullptr, nullptr, nullptr, 0,       nullptr, nullptr,
-      nullptr, 0,       nullptr, nullptr, nullptr, nullptr, kTestFilter1};
+      nullptr, nullptr, 0,       nullptr, nullptr, nullptr,
+      0,       nullptr, nullptr, nullptr, nullptr, kTestFilter1};
   const grpc_channel_filter test_filter_2 = {
-      nullptr, nullptr, nullptr, nullptr, 0,       nullptr, nullptr,
-      nullptr, 0,       nullptr, nullptr, nullptr, nullptr, kTestFilter2};
+      nullptr, nullptr, 0,       nullptr, nullptr, nullptr,
+      0,       nullptr, nullptr, nullptr, nullptr, kTestFilter2};
   auto channel_stack_modifier = MakeRefCounted<XdsChannelStackModifier>(
       std::vector<const grpc_channel_filter*>{&test_filter_1, &test_filter_2});
   grpc_arg arg = channel_stack_modifier->MakeChannelArg();
@@ -118,11 +116,12 @@ TEST(XdsChannelStackModifierTest, XdsHttpFiltersInsertion) {
   }
   std::vector<std::string> filters;
   for (const auto& entry : *builder.mutable_stack()) {
-    filters.push_back(entry->name);
+    filters.push_back(std::string(entry->name.name()));
   }
   filters.resize(3);
-  EXPECT_EQ(filters,
-            std::vector<std::string>({"server", kTestFilter1, kTestFilter2}));
+  EXPECT_EQ(filters, std::vector<std::string>(
+                         {"server", std::string(kTestFilter1.name()),
+                          std::string(kTestFilter2.name())}));
   grpc_shutdown();
 }
 

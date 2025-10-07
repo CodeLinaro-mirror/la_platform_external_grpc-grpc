@@ -16,15 +16,14 @@
 //
 //
 
+#include <grpc/status.h>
+
 #include <memory>
 
 #include "gmock/gmock.h"
 #include "gtest/gtest.h"
-
-#include <grpc/status.h>
-
 #include "src/core/ext/transport/chttp2/transport/internal.h"
-#include "src/core/lib/gprpp/time.h"
+#include "src/core/util/time.h"
 #include "test/core/end2end/end2end_tests.h"
 #include "test/core/end2end/tests/cancel_test_helpers.h"
 
@@ -43,9 +42,9 @@ void CancelAfterInvoke6(CoreEnd2endTest& test,
   // shutdown, the test would not timeout and fail.
   test.InitServer(ChannelArgs().Set(GRPC_ARG_PING_TIMEOUT_MS, 5000));
   auto c = test.NewClientCall("/service/method").Timeout(timeout).Create();
-  CoreEnd2endTest::IncomingStatusOnClient server_status;
-  CoreEnd2endTest::IncomingMetadata server_initial_metadata;
-  CoreEnd2endTest::IncomingMessage server_message;
+  IncomingStatusOnClient server_status;
+  IncomingMetadata server_initial_metadata;
+  IncomingMessage server_message;
   c.NewBatch(1)
       .RecvStatusOnClient(server_status)
       .RecvInitialMetadata(server_initial_metadata)
@@ -69,8 +68,8 @@ void CancelAfterInvoke5(CoreEnd2endTest& test,
   // shutdown, the test would not timeout and fail.
   test.InitServer(ChannelArgs().Set(GRPC_ARG_PING_TIMEOUT_MS, 5000));
   auto c = test.NewClientCall("/service/method").Timeout(timeout).Create();
-  CoreEnd2endTest::IncomingStatusOnClient server_status;
-  CoreEnd2endTest::IncomingMetadata server_initial_metadata;
+  IncomingStatusOnClient server_status;
+  IncomingMetadata server_initial_metadata;
   c.NewBatch(1)
       .RecvStatusOnClient(server_status)
       .RecvInitialMetadata(server_initial_metadata)
@@ -93,8 +92,8 @@ void CancelAfterInvoke4(CoreEnd2endTest& test,
   // shutdown, the test would not timeout and fail.
   test.InitServer(ChannelArgs().Set(GRPC_ARG_PING_TIMEOUT_MS, 5000));
   auto c = test.NewClientCall("/service/method").Timeout(timeout).Create();
-  CoreEnd2endTest::IncomingStatusOnClient server_status;
-  CoreEnd2endTest::IncomingMetadata server_initial_metadata;
+  IncomingStatusOnClient server_status;
+  IncomingMetadata server_initial_metadata;
   c.NewBatch(1)
       .RecvStatusOnClient(server_status)
       .RecvInitialMetadata(server_initial_metadata)
@@ -116,8 +115,8 @@ void CancelAfterInvoke3(CoreEnd2endTest& test,
   // shutdown, the test would not timeout and fail.
   test.InitServer(ChannelArgs().Set(GRPC_ARG_PING_TIMEOUT_MS, 5000));
   auto c = test.NewClientCall("/service/method").Timeout(timeout).Create();
-  CoreEnd2endTest::IncomingStatusOnClient server_status;
-  CoreEnd2endTest::IncomingMetadata server_initial_metadata;
+  IncomingStatusOnClient server_status;
+  IncomingMetadata server_initial_metadata;
   c.NewBatch(1)
       .RecvStatusOnClient(server_status)
       .RecvInitialMetadata(server_initial_metadata)

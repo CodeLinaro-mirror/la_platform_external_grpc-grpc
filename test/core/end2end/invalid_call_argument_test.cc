@@ -16,6 +16,15 @@
 //
 //
 
+#include <grpc/byte_buffer.h>
+#include <grpc/credentials.h>
+#include <grpc/grpc.h>
+#include <grpc/grpc_security.h>
+#include <grpc/impl/propagation_bits.h>
+#include <grpc/slice.h>
+#include <grpc/status.h>
+#include <grpc/support/port_platform.h>
+#include <grpc/support/time.h>
 #include <limits.h>
 #include <string.h>
 
@@ -24,19 +33,8 @@
 #include <string>
 
 #include "absl/log/check.h"
-
-#include <grpc/byte_buffer.h>
-#include <grpc/credentials.h>
-#include <grpc/grpc.h>
-#include <grpc/grpc_security.h>
-#include <grpc/impl/propagation_bits.h>
-#include <grpc/slice.h>
-#include <grpc/status.h>
-#include <grpc/support/log.h>
-#include <grpc/support/port_platform.h>
-#include <grpc/support/time.h>
-
-#include "src/core/lib/gprpp/host_port.h"
+#include "absl/log/log.h"
+#include "src/core/util/host_port.h"
 #include "test/core/end2end/cq_verifier.h"
 #include "test/core/test_util/port.h"
 #include "test/core/test_util/test_config.h"
@@ -74,11 +72,11 @@ static void prepare_test(int is_client) {
   memset(g_state.ops, 0, sizeof(g_state.ops));
 
   if (is_client) {
-    // create a call, channel to a non existant server
+    // create a call, channel to a non existent server
     grpc_channel_credentials* creds = grpc_insecure_credentials_create();
-    g_state.chan = grpc_channel_create("nonexistant:54321", creds, nullptr);
+    g_state.chan = grpc_channel_create("nonexistent:54321", creds, nullptr);
     grpc_channel_credentials_release(creds);
-    grpc_slice host = grpc_slice_from_static_string("nonexistant");
+    grpc_slice host = grpc_slice_from_static_string("nonexistent");
     g_state.call = grpc_channel_create_call(
         g_state.chan, nullptr, GRPC_PROPAGATE_DEFAULTS, g_state.cq,
         grpc_slice_from_static_string("/Foo"), &host, g_state.deadline,
@@ -155,7 +153,7 @@ static void cleanup_test() {
 }
 
 static void test_non_null_reserved_on_start_batch() {
-  gpr_log(GPR_INFO, "test_non_null_reserved_on_start_batch");
+  LOG(INFO) << "test_non_null_reserved_on_start_batch";
 
   prepare_test(1);
   CHECK(GRPC_CALL_ERROR ==
@@ -165,7 +163,7 @@ static void test_non_null_reserved_on_start_batch() {
 }
 
 static void test_non_null_reserved_on_op() {
-  gpr_log(GPR_INFO, "test_non_null_reserved_on_op");
+  LOG(INFO) << "test_non_null_reserved_on_op";
 
   grpc_op* op;
   prepare_test(1);
@@ -184,7 +182,7 @@ static void test_non_null_reserved_on_op() {
 }
 
 static void test_send_initial_metadata_more_than_once() {
-  gpr_log(GPR_INFO, "test_send_initial_metadata_more_than_once");
+  LOG(INFO) << "test_send_initial_metadata_more_than_once";
 
   grpc_op* op;
   prepare_test(1);
@@ -216,7 +214,7 @@ static void test_send_initial_metadata_more_than_once() {
 }
 
 static void test_too_many_metadata() {
-  gpr_log(GPR_INFO, "test_too_many_metadata");
+  LOG(INFO) << "test_too_many_metadata";
 
   grpc_op* op;
   prepare_test(1);
@@ -235,7 +233,7 @@ static void test_too_many_metadata() {
 }
 
 static void test_send_null_message() {
-  gpr_log(GPR_INFO, "test_send_null_message");
+  LOG(INFO) << "test_send_null_message";
 
   grpc_op* op;
   prepare_test(1);
@@ -259,7 +257,7 @@ static void test_send_null_message() {
 }
 
 static void test_send_messages_at_the_same_time() {
-  gpr_log(GPR_INFO, "test_send_messages_at_the_same_time");
+  LOG(INFO) << "test_send_messages_at_the_same_time";
 
   grpc_op* op;
   grpc_slice request_payload_slice =
@@ -293,7 +291,7 @@ static void test_send_messages_at_the_same_time() {
 }
 
 static void test_send_server_status_from_client() {
-  gpr_log(GPR_INFO, "test_send_server_status_from_client");
+  LOG(INFO) << "test_send_server_status_from_client";
 
   grpc_op* op;
   prepare_test(1);
@@ -315,7 +313,7 @@ static void test_send_server_status_from_client() {
 }
 
 static void test_receive_initial_metadata_twice_at_client() {
-  gpr_log(GPR_INFO, "test_receive_initial_metadata_twice_at_client");
+  LOG(INFO) << "test_receive_initial_metadata_twice_at_client";
 
   grpc_op* op;
   prepare_test(1);
@@ -347,7 +345,7 @@ static void test_receive_initial_metadata_twice_at_client() {
 }
 
 static void test_receive_message_with_invalid_flags() {
-  gpr_log(GPR_INFO, "test_receive_message_with_invalid_flags");
+  LOG(INFO) << "test_receive_message_with_invalid_flags";
 
   grpc_op* op;
   grpc_byte_buffer* payload = nullptr;
@@ -366,7 +364,7 @@ static void test_receive_message_with_invalid_flags() {
 }
 
 static void test_receive_two_messages_at_the_same_time() {
-  gpr_log(GPR_INFO, "test_receive_two_messages_at_the_same_time");
+  LOG(INFO) << "test_receive_two_messages_at_the_same_time";
 
   grpc_op* op;
   grpc_byte_buffer* payload = nullptr;
@@ -390,7 +388,7 @@ static void test_receive_two_messages_at_the_same_time() {
 }
 
 static void test_recv_close_on_server_from_client() {
-  gpr_log(GPR_INFO, "test_recv_close_on_server_from_client");
+  LOG(INFO) << "test_recv_close_on_server_from_client";
 
   grpc_op* op;
   prepare_test(1);
@@ -409,7 +407,7 @@ static void test_recv_close_on_server_from_client() {
 }
 
 static void test_recv_status_on_client_twice() {
-  gpr_log(GPR_INFO, "test_recv_status_on_client_twice");
+  LOG(INFO) << "test_recv_status_on_client_twice";
 
   grpc_op* op;
   prepare_test(1);
@@ -446,7 +444,7 @@ static void test_recv_status_on_client_twice() {
 }
 
 static void test_send_close_from_client_on_server() {
-  gpr_log(GPR_INFO, "test_send_close_from_client_on_server");
+  LOG(INFO) << "test_send_close_from_client_on_server";
 
   grpc_op* op;
   prepare_test(0);
@@ -464,7 +462,7 @@ static void test_send_close_from_client_on_server() {
 }
 
 static void test_recv_status_on_client_from_server() {
-  gpr_log(GPR_INFO, "test_recv_status_on_client_from_server");
+  LOG(INFO) << "test_recv_status_on_client_from_server";
 
   grpc_op* op;
   prepare_test(0);
@@ -486,7 +484,7 @@ static void test_recv_status_on_client_from_server() {
 }
 
 static void test_send_status_from_server_with_invalid_flags() {
-  gpr_log(GPR_INFO, "test_send_status_from_server_with_invalid_flags");
+  LOG(INFO) << "test_send_status_from_server_with_invalid_flags";
 
   grpc_op* op;
   prepare_test(0);
@@ -508,7 +506,7 @@ static void test_send_status_from_server_with_invalid_flags() {
 }
 
 static void test_too_many_trailing_metadata() {
-  gpr_log(GPR_INFO, "test_too_many_trailing_metadata");
+  LOG(INFO) << "test_too_many_trailing_metadata";
 
   grpc_op* op;
   prepare_test(0);
@@ -531,7 +529,7 @@ static void test_too_many_trailing_metadata() {
 }
 
 static void test_send_server_status_twice() {
-  gpr_log(GPR_INFO, "test_send_server_status_twice");
+  LOG(INFO) << "test_send_server_status_twice";
 
   grpc_op* op;
   prepare_test(0);
@@ -560,7 +558,7 @@ static void test_send_server_status_twice() {
 }
 
 static void test_recv_close_on_server_with_invalid_flags() {
-  gpr_log(GPR_INFO, "test_recv_close_on_server_with_invalid_flags");
+  LOG(INFO) << "test_recv_close_on_server_with_invalid_flags";
 
   grpc_op* op;
   prepare_test(0);
@@ -579,7 +577,7 @@ static void test_recv_close_on_server_with_invalid_flags() {
 }
 
 static void test_recv_close_on_server_twice() {
-  gpr_log(GPR_INFO, "test_recv_close_on_server_twice");
+  LOG(INFO) << "test_recv_close_on_server_twice";
 
   grpc_op* op;
   prepare_test(0);
@@ -603,7 +601,7 @@ static void test_recv_close_on_server_twice() {
 }
 
 static void test_invalid_initial_metadata_reserved_key() {
-  gpr_log(GPR_INFO, "test_invalid_initial_metadata_reserved_key");
+  LOG(INFO) << "test_invalid_initial_metadata_reserved_key";
 
   grpc_metadata metadata;
   metadata.key = grpc_slice_from_static_string(":start_with_colon");
@@ -626,7 +624,7 @@ static void test_invalid_initial_metadata_reserved_key() {
 }
 
 static void test_multiple_ops_in_a_single_batch() {
-  gpr_log(GPR_INFO, "test_multiple_ops_in_a_single_batch");
+  LOG(INFO) << "test_multiple_ops_in_a_single_batch";
 
   grpc_op* op;
   prepare_test(1);

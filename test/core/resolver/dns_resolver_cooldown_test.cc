@@ -16,6 +16,13 @@
 //
 //
 
+#include <grpc/event_engine/event_engine.h>
+#include <grpc/grpc.h>
+#include <grpc/impl/channel_arg_names.h>
+#include <grpc/support/alloc.h>
+#include <grpc/support/atm.h>
+#include <grpc/support/sync.h>
+#include <grpc/support/time.h>
 #include <inttypes.h>
 
 #include <functional>
@@ -24,30 +31,15 @@
 #include <utility>
 #include <vector>
 
+#include "absl/log/log.h"
 #include "absl/status/status.h"
 #include "absl/status/statusor.h"
 #include "absl/strings/string_view.h"
 #include "gtest/gtest.h"
-
-#include <grpc/event_engine/event_engine.h>
-#include <grpc/grpc.h>
-#include <grpc/impl/channel_arg_names.h>
-#include <grpc/support/alloc.h>
-#include <grpc/support/atm.h>
-#include <grpc/support/log.h>
-#include <grpc/support/sync.h>
-#include <grpc/support/time.h>
-
+#include "src/core/config/core_configuration.h"
 #include "src/core/lib/channel/channel_args.h"
-#include "src/core/lib/config/core_configuration.h"
 #include "src/core/lib/event_engine/default_event_engine.h"
 #include "src/core/lib/experiments/experiments.h"
-#include "src/core/lib/gprpp/debug_location.h"
-#include "src/core/lib/gprpp/no_destruct.h"
-#include "src/core/lib/gprpp/notification.h"
-#include "src/core/lib/gprpp/orphanable.h"
-#include "src/core/lib/gprpp/time.h"
-#include "src/core/lib/gprpp/work_serializer.h"
 #include "src/core/lib/iomgr/closure.h"
 #include "src/core/lib/iomgr/error.h"
 #include "src/core/lib/iomgr/exec_ctx.h"
@@ -56,12 +48,18 @@
 #include "src/core/lib/iomgr/pollset_set.h"
 #include "src/core/lib/iomgr/resolve_address.h"
 #include "src/core/lib/iomgr/resolved_address.h"
-#include "src/core/lib/uri/uri_parser.h"
 #include "src/core/resolver/dns/c_ares/grpc_ares_wrapper.h"
 #include "src/core/resolver/endpoint_addresses.h"
 #include "src/core/resolver/resolver.h"
 #include "src/core/resolver/resolver_factory.h"
 #include "src/core/resolver/resolver_registry.h"
+#include "src/core/util/debug_location.h"
+#include "src/core/util/no_destruct.h"
+#include "src/core/util/notification.h"
+#include "src/core/util/orphanable.h"
+#include "src/core/util/time.h"
+#include "src/core/util/uri.h"
+#include "src/core/util/work_serializer.h"
 #include "test/core/test_util/test_config.h"
 
 using ::grpc_event_engine::experimental::GetDefaultEventEngine;
@@ -188,11 +186,10 @@ static grpc_ares_request* test_dns_lookup_ares(
   static auto last_resolution_time = grpc_core::Timestamp::ProcessEpoch();
   auto now =
       grpc_core::Timestamp::FromTimespecRoundUp(gpr_now(GPR_CLOCK_MONOTONIC));
-  gpr_log(GPR_DEBUG,
-          "last_resolution_time:%" PRId64 " now:%" PRId64
-          " min_time_between:%d",
-          last_resolution_time.milliseconds_after_process_epoch(),
-          now.milliseconds_after_process_epoch(), kMinResolutionPeriodMs);
+  VLOG(2) << "last_resolution_time:"
+          << last_resolution_time.milliseconds_after_process_epoch()
+          << " now:" << now.milliseconds_after_process_epoch()
+          << " min_time_between:" << kMinResolutionPeriodMs;
   if (last_resolution_time != grpc_core::Timestamp::ProcessEpoch()) {
     EXPECT_GE(now - last_resolution_time,
               grpc_core::Duration::Milliseconds(kMinResolutionPeriodMs));
@@ -253,7 +250,7 @@ static void poll_pollset_until_request_done(iomgr_args* args) {
       break;
     }
     grpc_core::Duration time_left = deadline - grpc_core::Timestamp::Now();
-    gpr_log(GPR_DEBUG, "done=%d, time_left=%" PRId64, done, time_left.millis());
+    VLOG(2) << "done=" << done << ", time_left=" << time_left.millis();
     ASSERT_GE(time_left, grpc_core::Duration::Zero());
     grpc_pollset_worker* worker = nullptr;
     gpr_mu_lock(args->mu);
@@ -311,7 +308,7 @@ static grpc_core::NoDestruct<grpc_core::Notification> g_all_callbacks_invoked;
 // from "Now()". Thus the more rounds ran, the more highlighted the
 // difference is between absolute and relative times values.
 static void on_fourth_resolution(OnResolutionCallbackArg* cb_arg) {
-  gpr_log(GPR_INFO, "4th: g_resolution_count: %d", g_resolution_count);
+  LOG(INFO) << "4th: g_resolution_count: " << g_resolution_count;
   ASSERT_EQ(g_resolution_count, 4);
   cb_arg->resolver.reset();
   gpr_atm_rel_store(&g_iomgr_args.done_atm, 1);
@@ -324,7 +321,7 @@ static void on_fourth_resolution(OnResolutionCallbackArg* cb_arg) {
 }
 
 static void on_third_resolution(OnResolutionCallbackArg* cb_arg) {
-  gpr_log(GPR_INFO, "3rd: g_resolution_count: %d", g_resolution_count);
+  LOG(INFO) << "3rd: g_resolution_count: " << g_resolution_count;
   ASSERT_EQ(g_resolution_count, 3);
   cb_arg->result_handler->SetCallback(on_fourth_resolution, cb_arg);
   cb_arg->resolver->RequestReresolutionLocked();
@@ -335,7 +332,7 @@ static void on_third_resolution(OnResolutionCallbackArg* cb_arg) {
 }
 
 static void on_second_resolution(OnResolutionCallbackArg* cb_arg) {
-  gpr_log(GPR_INFO, "2nd: g_resolution_count: %d", g_resolution_count);
+  LOG(INFO) << "2nd: g_resolution_count: " << g_resolution_count;
   // The resolution callback was not invoked until new data was
   // available, which was delayed until after the cooldown period.
   ASSERT_EQ(g_resolution_count, 2);
@@ -348,7 +345,7 @@ static void on_second_resolution(OnResolutionCallbackArg* cb_arg) {
 }
 
 static void on_first_resolution(OnResolutionCallbackArg* cb_arg) {
-  gpr_log(GPR_INFO, "1st: g_resolution_count: %d", g_resolution_count);
+  LOG(INFO) << "1st: g_resolution_count: " << g_resolution_count;
   // There's one initial system-level resolution and one invocation of a
   // notification callback (the current function).
   ASSERT_EQ(g_resolution_count, 1);
@@ -369,10 +366,10 @@ static void start_test_under_work_serializer(void* arg) {
                                             .LookupResolverFactory("dns");
   absl::StatusOr<grpc_core::URI> uri =
       grpc_core::URI::Parse(res_cb_arg->uri_str);
-  gpr_log(GPR_DEBUG, "test: '%s' should be valid for '%s'", res_cb_arg->uri_str,
-          std::string(factory->scheme()).c_str());
+  VLOG(2) << "test: '" << res_cb_arg->uri_str << "' should be valid for '"
+          << factory->scheme() << "'";
   if (!uri.ok()) {
-    gpr_log(GPR_ERROR, "%s", uri.status().ToString().c_str());
+    LOG(ERROR) << uri.status();
     ASSERT_TRUE(uri.ok());
   }
   grpc_core::ResolverArgs args;

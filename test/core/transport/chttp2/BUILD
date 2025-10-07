@@ -141,7 +141,10 @@ grpc_cc_test(
 grpc_cc_test(
     name = "bin_decoder_test",
     srcs = ["bin_decoder_test.cc"],
-    external_deps = ["gtest"],
+    external_deps = [
+        "absl/log:log",
+        "gtest",
+    ],
     language = "C++",
     uses_event_engine = False,
     uses_polling = False,
@@ -169,7 +172,10 @@ grpc_cc_test(
 grpc_cc_test(
     name = "bin_encoder_test",
     srcs = ["bin_encoder_test.cc"],
-    external_deps = ["gtest"],
+    external_deps = [
+        "absl/log:log",
+        "gtest",
+    ],
     language = "C++",
     uses_event_engine = False,
     uses_polling = False,
@@ -292,7 +298,10 @@ grpc_cc_test(
 grpc_cc_test(
     name = "hpack_encoder_test",
     srcs = ["hpack_encoder_test.cc"],
-    external_deps = ["gtest"],
+    external_deps = [
+        "absl/log:log",
+        "gtest",
+    ],
     language = "C++",
     tags = ["hpack_test"],
     uses_event_engine = False,
@@ -338,16 +347,6 @@ grpc_cc_test(
 )
 
 grpc_cc_test(
-    name = "max_concurrent_streams_policy_test",
-    srcs = ["max_concurrent_streams_policy_test.cc"],
-    external_deps = ["gtest"],
-    language = "C++",
-    deps = [
-        "//src/core:max_concurrent_streams_policy",
-    ],
-)
-
-grpc_cc_test(
     name = "streams_not_seen_test",
     srcs = ["streams_not_seen_test.cc"],
     external_deps = [
@@ -373,6 +372,7 @@ grpc_cc_test(
     srcs = ["settings_timeout_test.cc"],
     external_deps = [
         "absl/log:check",
+        "absl/log:log",
         "gtest",
     ],
     language = "C++",
@@ -391,6 +391,7 @@ grpc_cc_test(
     srcs = ["too_many_pings_test.cc"],
     external_deps = [
         "absl/log:check",
+        "absl/log:log",
         "gtest",
     ],
     flaky = True,
@@ -410,7 +411,10 @@ grpc_cc_test(
 grpc_cc_test(
     name = "varint_test",
     srcs = ["varint_test.cc"],
-    external_deps = ["gtest"],
+    external_deps = [
+        "absl/log:log",
+        "gtest",
+    ],
     language = "C++",
     uses_event_engine = False,
     uses_polling = False,
@@ -434,6 +438,7 @@ grpc_cc_test(
     exec_properties = LARGE_MACHINE,
     external_deps = [
         "absl/log:check",
+        "absl/log:log",
         "gtest",
     ],
     language = "C++",
@@ -454,6 +459,7 @@ grpc_cc_test(
     srcs = ["stream_leak_with_queued_flow_control_update_test.cc"],
     external_deps = [
         "absl/log:check",
+        "absl/log:log",
         "gtest",
     ],
     language = "C++",
@@ -479,5 +485,37 @@ grpc_cc_test(
         "//:grpc",
         "//src/core:http2_settings",
         "//test/core/test_util:grpc_test_util",
+    ],
+)
+
+grpc_cc_test(
+    name = "http2_client_transport_test",
+    srcs = ["http2_client_transport_test.cc"],
+    external_deps = ["gtest"],
+    language = "C++",
+    uses_polling = False,
+    deps = [
+        "//:gpr",
+        "//:grpc",
+        "//:grpc_http2_client_transport",
+        "//test/core/test_util:grpc_test_util",
+        "//test/core/test_util:grpc_test_util_base",
+        "//test/core/transport/util:mock_promise_endpoint",
+    ],
+)
+
+grpc_cc_test(
+    name = "http2_server_transport_test",
+    srcs = ["http2_server_transport_test.cc"],
+    external_deps = ["gtest"],
+    language = "C++",
+    uses_polling = False,
+    deps = [
+        "//:gpr",
+        "//:grpc",
+        "//:grpc_http2_server_transport",
+        "//test/core/test_util:grpc_test_util",
+        "//test/core/test_util:grpc_test_util_base",
+        "//test/core/transport/util:mock_promise_endpoint",
     ],
 )

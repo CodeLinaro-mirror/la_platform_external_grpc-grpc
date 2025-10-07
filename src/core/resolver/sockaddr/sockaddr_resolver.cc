@@ -14,28 +14,27 @@
 // limitations under the License.
 //
 
+#include <grpc/support/port_platform.h>
+
 #include <algorithm>
 #include <memory>
 #include <string>
 #include <utility>
 
+#include "absl/log/log.h"
 #include "absl/status/statusor.h"
 #include "absl/strings/str_split.h"
 #include "absl/strings/string_view.h"
-
-#include <grpc/support/log.h>
-#include <grpc/support/port_platform.h>
-
+#include "src/core/config/core_configuration.h"
 #include "src/core/lib/address_utils/parse_address.h"
 #include "src/core/lib/channel/channel_args.h"
-#include "src/core/lib/config/core_configuration.h"
-#include "src/core/lib/gprpp/orphanable.h"
 #include "src/core/lib/iomgr/port.h"
 #include "src/core/lib/iomgr/resolved_address.h"
-#include "src/core/lib/uri/uri_parser.h"
 #include "src/core/resolver/endpoint_addresses.h"
 #include "src/core/resolver/resolver.h"
 #include "src/core/resolver/resolver_factory.h"
+#include "src/core/util/orphanable.h"
+#include "src/core/util/uri.h"
 
 namespace grpc_core {
 
@@ -76,8 +75,8 @@ bool ParseUri(const URI& uri,
               bool parse(const URI& uri, grpc_resolved_address* dst),
               EndpointAddressesList* addresses) {
   if (!uri.authority().empty()) {
-    gpr_log(GPR_ERROR, "authority-based URIs not supported by the %s scheme",
-            uri.scheme().c_str());
+    LOG(ERROR) << "authority-based URIs not supported by the " << uri.scheme()
+               << " scheme";
     return false;
   }
   // Construct addresses.

@@ -12,7 +12,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-load("//bazel:grpc_build_system.bzl", "grpc_cc_library", "grpc_cc_test", "grpc_package", "grpc_proto_library")
+load("//bazel:grpc_build_system.bzl", "grpc_cc_library", "grpc_cc_proto_library", "grpc_cc_test", "grpc_internal_proto_library", "grpc_package")
 
 licenses(["notice"])
 
@@ -81,6 +81,7 @@ grpc_cc_library(
     ],
     external_deps = [
         "absl/log:check",
+        "absl/log:log",
         "absl/status:statusor",
         "absl/strings",
         "absl/strings:str_format",
@@ -119,6 +120,9 @@ grpc_cc_library(
         "absl/base:core_headers",
         "absl/debugging:failure_signal_handler",
         "absl/log:check",
+        "absl/log:globals",
+        "absl/log:initialize",
+        "absl/log:log",
         "absl/status",
         "absl/status:statusor",
         "absl/strings",
@@ -138,7 +142,7 @@ grpc_cc_library(
         "//:orphanable",
         "//:ref_counted_ptr",
         "//:tsi_ssl_credentials",
-        "//:uri_parser",
+        "//:uri",
         "//src/core:channel_args_endpoint_config",
         "//src/core:channel_args_preconditioning",
         "//src/core:closure",
@@ -165,6 +169,8 @@ grpc_cc_library(
     external_deps = [
         "absl/debugging:failure_signal_handler",
         "absl/log:check",
+        "absl/log:initialize",
+        "absl/log:log",
         "absl/status",
         "absl/status:statusor",
         "absl/strings",
@@ -182,7 +188,7 @@ grpc_cc_library(
         "//:httpcli",
         "//:orphanable",
         "//:ref_counted_ptr",
-        "//:uri_parser",
+        "//:uri",
         "//src/core:channel_args_endpoint_config",
         "//src/core:channel_args_preconditioning",
         "//src/core:closure",
@@ -202,7 +208,10 @@ grpc_cc_library(
 grpc_cc_test(
     name = "cmdline_test",
     srcs = ["cmdline_test.cc"],
-    external_deps = ["gtest"],
+    external_deps = [
+        "absl/log:log",
+        "gtest",
+    ],
     language = "C++",
     uses_event_engine = False,
     uses_polling = False,
@@ -221,6 +230,7 @@ grpc_cc_library(
     external_deps = [
         "absl/flags:flag",
         "absl/log:check",
+        "absl/log:log",
         "gtest",
     ],
     linkstatic = True,
@@ -238,7 +248,10 @@ grpc_cc_library(
 grpc_cc_test(
     name = "histogram_test",
     srcs = ["histogram_test.cc"],
-    external_deps = ["gtest"],
+    external_deps = [
+        "absl/log:log",
+        "gtest",
+    ],
     language = "C++",
     tags = ["nofixdeps"],
     uses_event_engine = False,
@@ -248,11 +261,6 @@ grpc_cc_test(
         "grpc_test_util_base",
         "//:gpr",
     ],
-)
-
-sh_library(
-    name = "fuzzer_one_entry_runner",
-    srcs = ["fuzzer_one_entry_runner.sh"],
 )
 
 grpc_cc_library(
@@ -280,6 +288,7 @@ grpc_cc_test(
         "stack_tracer_test.cc",
     ],
     external_deps = [
+        "absl/log:log",
         "absl/strings",
         "gtest",
     ],
@@ -302,6 +311,7 @@ grpc_cc_library(
     hdrs = ["test_lb_policies.h"],
     external_deps = [
         "absl/log:check",
+        "absl/log:log",
         "absl/status",
         "absl/status:statusor",
         "absl/strings",
@@ -317,13 +327,15 @@ grpc_cc_library(
         "//:orphanable",
         "//:parse_address",
         "//:ref_counted_ptr",
-        "//:uri_parser",
+        "//:uri",
         "//src/core:channel_args",
         "//src/core:delegating_helper",
+        "//src/core:down_cast",
         "//src/core:error",
         "//src/core:grpc_backend_metric_data",
         "//src/core:json",
         "//src/core:json_util",
+        "//src/core:lb_metadata",
         "//src/core:lb_policy",
         "//src/core:lb_policy_factory",
         "//src/core:lb_policy_registry",
@@ -341,6 +353,7 @@ grpc_cc_library(
     hdrs = ["fake_udp_and_tcp_server.h"],
     external_deps = [
         "absl/log:check",
+        "absl/log:log",
         "absl/status:statusor",
         "absl/strings",
     ],
@@ -377,7 +390,10 @@ grpc_cc_library(
     testonly = True,
     srcs = ["socket_use_after_close_detector.cc"],
     hdrs = ["socket_use_after_close_detector.h"],
-    external_deps = ["gtest"],
+    external_deps = [
+        "absl/log:log",
+        "gtest",
+    ],
     language = "C++",
     deps = [
         "grpc_test_util",
@@ -432,10 +448,14 @@ grpc_cc_library(
     ],
 )
 
-grpc_proto_library(
+grpc_internal_proto_library(
     name = "fuzz_config_vars_proto",
     srcs = ["fuzz_config_vars.proto"],
-    has_services = False,
+)
+
+grpc_cc_proto_library(
+    name = "fuzz_config_vars_cc_proto",
+    deps = ["fuzz_config_vars_proto"],
 )
 
 grpc_cc_library(
@@ -444,8 +464,8 @@ grpc_cc_library(
     hdrs = ["fuzz_config_vars.h"],
     external_deps = ["absl/types:optional"],
     deps = [
+        "fuzz_config_vars_cc_proto",
         "fuzz_config_vars_helpers",
-        "fuzz_config_vars_proto",
         "//:config_vars",
         "//:gpr_platform",
     ],
@@ -478,10 +498,14 @@ grpc_cc_library(
     ],
 )
 
-grpc_proto_library(
+grpc_internal_proto_library(
     name = "fuzzing_channel_args_proto",
     srcs = ["fuzzing_channel_args.proto"],
-    has_services = False,
+)
+
+grpc_cc_proto_library(
+    name = "fuzzing_channel_args_cc_proto",
+    deps = ["fuzzing_channel_args_proto"],
 )
 
 grpc_cc_library(
@@ -489,7 +513,7 @@ grpc_cc_library(
     srcs = ["fuzzing_channel_args.cc"],
     hdrs = ["fuzzing_channel_args.h"],
     deps = [
-        "fuzzing_channel_args_proto",
+        "fuzzing_channel_args_cc_proto",
         "//:gpr_platform",
         "//:ref_counted_ptr",
         "//src/core:channel_args",
@@ -506,6 +530,7 @@ grpc_cc_library(
         "absl/container:flat_hash_map",
         "absl/functional:any_invocable",
         "absl/log:check",
+        "absl/log:log",
         "absl/status",
         "absl/strings",
         "absl/types:optional",
@@ -516,5 +541,17 @@ grpc_cc_library(
         "//:grpc",
         "//src/core:examine_stack",
         "//src/core:metrics",
+    ],
+)
+
+grpc_cc_library(
+    name = "passthrough_endpoint",
+    testonly = True,
+    srcs = ["passthrough_endpoint.cc"],
+    hdrs = ["passthrough_endpoint.h"],
+    external_deps = [
+    ],
+    deps = [
+        "//:grpc",
     ],
 )

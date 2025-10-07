@@ -18,11 +18,9 @@
 #define GRPC_SRC_CORE_EXT_FILTERS_RBAC_RBAC_FILTER_H
 
 #include <grpc/support/port_platform.h>
-
 #include <stddef.h>
 
 #include "absl/status/statusor.h"
-
 #include "src/core/lib/channel/channel_args.h"
 #include "src/core/lib/channel/channel_fwd.h"
 #include "src/core/lib/channel/promise_based_filter.h"
@@ -42,6 +40,8 @@ class RbacFilter : public ImplementChannelFilter<RbacFilter> {
   // and enforces the RBAC policy.
   static const grpc_channel_filter kFilterVtable;
 
+  static absl::string_view TypeName() { return "rbac_filter"; }
+
   static absl::StatusOr<std::unique_ptr<RbacFilter>> Create(
       const ChannelArgs& args, ChannelFilter::Args filter_args);
 
@@ -55,6 +55,7 @@ class RbacFilter : public ImplementChannelFilter<RbacFilter> {
     static const NoInterceptor OnServerInitialMetadata;
     static const NoInterceptor OnServerTrailingMetadata;
     static const NoInterceptor OnClientToServerMessage;
+    static const NoInterceptor OnClientToServerHalfClose;
     static const NoInterceptor OnServerToClientMessage;
     static const NoInterceptor OnFinalize;
   };

@@ -13,20 +13,20 @@
 // limitations under the License.
 //
 
+#include <gmock/gmock.h>
+#include <gtest/gtest.h>
+
 #include <algorithm>
 #include <memory>
 #include <string>
 #include <type_traits>
 #include <vector>
 
-#include <gmock/gmock.h>
-#include <gtest/gtest.h>
-
+#include "absl/log/log.h"
 #include "absl/strings/str_cat.h"
-
+#include "envoy/config/listener/v3/listener.pb.h"
 #include "src/core/client_channel/backup_poller.h"
-#include "src/core/lib/config/config_vars.h"
-#include "src/proto/grpc/testing/xds/v3/listener.pb.h"
+#include "src/core/config/config_vars.h"
 #include "test/core/test_util/fake_stats_plugin.h"
 #include "test/core/test_util/resolve_localhost_ip46.h"
 #include "test/core/test_util/scoped_env_var.h"
@@ -150,13 +150,42 @@ TEST_P(XdsClientTest, XdsStreamErrorPropagation) {
   balancer_->ads_service()->ForceADSFailure(
       Status(StatusCode::RESOURCE_EXHAUSTED, kErrorMessage));
   auto status = SendRpc();
-  gpr_log(GPR_INFO,
-          "XdsStreamErrorPropagation test: RPC got error: code=%d message=%s",
-          status.error_code(), status.error_message().c_str());
+  LOG(INFO) << "XdsStreamErrorPropagation test: RPC got error: code="
+            << status.error_code()
+            << " message=" << status.error_message().c_str();
   EXPECT_THAT(status.error_code(), StatusCode::UNAVAILABLE);
   EXPECT_THAT(status.error_message(), ::testing::HasSubstr(kErrorMessage));
   EXPECT_THAT(status.error_message(),
               ::testing::HasSubstr("(node ID:xds_end2end_test)"));
+}
+
+//
+// XdsServerTlsTest: xDS server using TlsCreds
+//
+
+class XdsServerTlsTest : public XdsEnd2endTest {
+ protected:
+  XdsServerTlsTest()
+      : XdsEnd2endTest(/*balancer_credentials=*/CreateTlsServerCredentials()) {}
+
+  void SetUp() override {
+    InitClient(MakeBootstrapBuilder().SetXdsChannelCredentials(
+                   "tls", absl::StrCat("{\"ca_certificate_file\": \"",
+                                       kCaCertPath, "\"}")),
+               /*lb_expected_authority=*/"",
+               /*xds_resource_does_not_exist_timeout_ms=*/0,
+               /*balancer_authority_override=*/"foo.test.google.fr");
+  }
+};
+
+INSTANTIATE_TEST_SUITE_P(XdsTest, XdsServerTlsTest,
+                         ::testing::Values(XdsTestType()), &XdsTestType::Name);
+
+TEST_P(XdsServerTlsTest, Basic) {
+  CreateAndStartBackends(1);
+  EdsResourceArgs args({{"locality0", CreateEndpointsForBackends()}});
+  balancer_->ads_service()->SetEdsResource(BuildEdsResource(args));
+  CheckRpcSendOk(DEBUG_LOCATION);
 }
 
 //
@@ -288,8 +317,8 @@ TEST_P(GlobalXdsClientTest, MultipleBadLdsResources) {
               response->error_message == expected_message2) {
             return response;
           }
-          gpr_log(GPR_INFO, "non-matching NACK message: %s",
-                  response->error_message.c_str());
+          LOG(INFO) << "non-matching NACK message: "
+                    << response->error_message.c_str();
         }
         return absl::nullopt;
       });
@@ -510,7 +539,7 @@ TEST_P(TimeoutTest, EdsSecondResourceNotPresentInRequest) {
   EdsResourceArgs args({{"locality0", CreateEndpointsForBackends()}});
   balancer_->ads_service()->SetEdsResource(BuildEdsResource(args));
   CheckRpcSendOk(DEBUG_LOCATION, 1, RpcOptions().set_timeout_ms(4000));
-  // New cluster that points to a non-existant EDS resource.
+  // New cluster that points to a non-existent EDS resource.
   const char* kNewClusterName = "new_cluster_name";
   Cluster cluster = default_cluster_;
   cluster.set_name(kNewClusterName);
@@ -1030,7 +1059,7 @@ TEST_P(XdsFederationTest, FederationServer) {
       "xdstp://xds.example.com/envoy.config.listener.v3.Listener"
       "client/%s?client_listener_resource_name_template_not_in_use");
   InitClient(builder);
-  CreateAndStartBackends(2, /*xds_enabled=*/true);
+  CreateBackends(2, /*xds_enabled=*/true);
   // Eds for new authority balancer.
   EdsResourceArgs args =
       EdsResourceArgs({{"locality0", CreateEndpointsForBackends()}});
@@ -1069,6 +1098,13 @@ TEST_P(XdsFederationTest, FederationServer) {
                                      new_server_route_config,
                                      ServerHcmAccessor());
   }
+  // Start backends and wait for them to start serving.
+  StartAllBackends();
+  for (const auto& backend : backends_) {
+    ASSERT_TRUE(backend->notifier()->WaitOnServingStatusChange(
+        grpc_core::LocalIpAndPort(backend->port()), grpc::StatusCode::OK));
+  }
+  // Make sure everything works.
   WaitForAllBackends(DEBUG_LOCATION);
 }
 
@@ -1079,10 +1115,23 @@ TEST_P(XdsFederationTest, FederationServer) {
 class XdsMetricsTest : public XdsEnd2endTest {
  protected:
   void SetUp() override {
-    stats_plugin_ = grpc_core::FakeStatsPluginBuilder()
-                        .UseDisabledByDefaultMetrics(true)
-                        .BuildAndRegister();
-    InitClient();
+    stats_plugin_ =
+        grpc_core::FakeStatsPluginBuilder()
+            .UseDisabledByDefaultMetrics(true)
+            .SetChannelFilter(
+                [](const grpc_core::experimental::StatsPluginChannelScope&
+                       scope) {
+                  return scope.target() == absl::StrCat("xds:", kServerName) &&
+                         scope.default_authority() == kServerName &&
+                         scope.experimental_args().GetString("test_only.arg") ==
+                             "test_only.value";
+                })
+            .BuildAndRegister();
+    ChannelArguments args;
+    args.SetString("test_only.arg", "test_only.value");
+    InitClient(/*builder=*/absl::nullopt, /*lb_expected_authority=*/"",
+               /*xds_resource_does_not_exist_timeout_ms=*/0,
+               /*balancer_authority_override=*/"", /*args=*/&args);
   }
 
   std::shared_ptr<grpc_core::FakeStatsPlugin> stats_plugin_;
@@ -1214,14 +1263,17 @@ TEST_P(XdsMetricsTest, MetricValues) {
   EdsResourceArgs args =
       EdsResourceArgs({{"locality0", CreateEndpointsForBackends()}});
   balancer_->ads_service()->SetEdsResource(BuildEdsResource(args));
-  CheckRpcSendOk(DEBUG_LOCATION);
+  // Use wait_for_ready and increase timeout, in case the client takes a
+  // little while to get connected.
+  CheckRpcSendOk(DEBUG_LOCATION, /*times=*/1,
+                 RpcOptions().set_wait_for_ready(true).set_timeout_ms(15000));
   stats_plugin_->TriggerCallbacks();
   // Check client metrics.
-  EXPECT_THAT(stats_plugin_->GetCallbackGaugeValue(kMetricConnected,
-                                                   {kTarget, kXdsServer}, {}),
+  EXPECT_THAT(stats_plugin_->GetInt64CallbackGaugeValue(
+                  kMetricConnected, {kTarget, kXdsServer}, {}),
               ::testing::Optional(1));
-  EXPECT_THAT(stats_plugin_->GetCounterValue(kMetricServerFailure,
-                                             {kTarget, kXdsServer}, {}),
+  EXPECT_THAT(stats_plugin_->GetUInt64CounterValue(kMetricServerFailure,
+                                                   {kTarget, kXdsServer}, {}),
               absl::nullopt);
   for (absl::string_view type_url :
        {"envoy.config.listener.v3.Listener",
@@ -1229,37 +1281,37 @@ TEST_P(XdsMetricsTest, MetricValues) {
         "envoy.config.cluster.v3.Cluster",
         "envoy.config.endpoint.v3.ClusterLoadAssignment"}) {
     EXPECT_THAT(
-        stats_plugin_->GetCounterValue(kMetricResourceUpdatesValid,
-                                       {kTarget, kXdsServer, type_url}, {}),
+        stats_plugin_->GetUInt64CounterValue(
+            kMetricResourceUpdatesValid, {kTarget, kXdsServer, type_url}, {}),
         ::testing::Optional(1));
     EXPECT_THAT(
-        stats_plugin_->GetCounterValue(kMetricResourceUpdatesInvalid,
-                                       {kTarget, kXdsServer, type_url}, {}),
+        stats_plugin_->GetUInt64CounterValue(
+            kMetricResourceUpdatesInvalid, {kTarget, kXdsServer, type_url}, {}),
         ::testing::Optional(0));
-    EXPECT_THAT(stats_plugin_->GetCallbackGaugeValue(
+    EXPECT_THAT(stats_plugin_->GetInt64CallbackGaugeValue(
                     kMetricResources, {kTarget, "#old", type_url, "acked"}, {}),
                 ::testing::Optional(1));
   }
   // Check server metrics.
-  EXPECT_THAT(stats_plugin_->GetCallbackGaugeValue(kMetricConnected,
-                                                   {"#server", kXdsServer}, {}),
+  EXPECT_THAT(stats_plugin_->GetInt64CallbackGaugeValue(
+                  kMetricConnected, {"#server", kXdsServer}, {}),
               ::testing::Optional(1));
-  EXPECT_THAT(stats_plugin_->GetCounterValue(kMetricServerFailure,
-                                             {"#server", kXdsServer}, {}),
+  EXPECT_THAT(stats_plugin_->GetUInt64CounterValue(kMetricServerFailure,
+                                                   {"#server", kXdsServer}, {}),
               absl::nullopt);
   for (absl::string_view type_url :
        {"envoy.config.listener.v3.Listener",
         "envoy.config.route.v3.RouteConfiguration"}) {
     EXPECT_THAT(
-        stats_plugin_->GetCounterValue(kMetricResourceUpdatesValid,
-                                       {"#server", kXdsServer, type_url}, {}),
+        stats_plugin_->GetUInt64CounterValue(
+            kMetricResourceUpdatesValid, {"#server", kXdsServer, type_url}, {}),
         ::testing::Optional(1));
+    EXPECT_THAT(stats_plugin_->GetUInt64CounterValue(
+                    kMetricResourceUpdatesInvalid,
+                    {"#server", kXdsServer, type_url}, {}),
+                ::testing::Optional(0));
     EXPECT_THAT(
-        stats_plugin_->GetCounterValue(kMetricResourceUpdatesInvalid,
-                                       {"#server", kXdsServer, type_url}, {}),
-        ::testing::Optional(0));
-    EXPECT_THAT(
-        stats_plugin_->GetCallbackGaugeValue(
+        stats_plugin_->GetInt64CallbackGaugeValue(
             kMetricResources, {"#server", "#old", type_url, "acked"}, {}),
         ::testing::Optional(1));
   }
@@ -1269,8 +1321,8 @@ TEST_P(XdsMetricsTest, MetricValues) {
     const absl::Time deadline =
         absl::Now() + absl::Seconds(5 * grpc_test_slowdown_factor());
     while (true) {
-      auto value = stats_plugin_->GetCounterValue(kMetricServerFailure,
-                                                  {target, kXdsServer}, {});
+      auto value = stats_plugin_->GetUInt64CounterValue(
+          kMetricServerFailure, {target, kXdsServer}, {});
       if (value.has_value()) {
         EXPECT_EQ(1, *value);
         break;
@@ -1279,8 +1331,8 @@ TEST_P(XdsMetricsTest, MetricValues) {
       absl::SleepFor(absl::Seconds(1));
     }
     stats_plugin_->TriggerCallbacks();
-    EXPECT_THAT(stats_plugin_->GetCallbackGaugeValue(kMetricConnected,
-                                                     {target, kXdsServer}, {}),
+    EXPECT_THAT(stats_plugin_->GetInt64CallbackGaugeValue(
+                    kMetricConnected, {target, kXdsServer}, {}),
                 ::testing::Optional(0));
   }
 }
@@ -1413,7 +1465,8 @@ TEST_P(XdsFederationLoadReportingTest, FederationMultipleLoadReportingTest) {
   SetListenerAndRouteConfiguration(authority_balancer_.get(), listener,
                                    new_route_config);
   // Send kNumRpcsToDefaultBalancer RPCs to the current stub.
-  CheckRpcSendOk(DEBUG_LOCATION, kNumRpcsToDefaultBalancer);
+  CheckRpcSendOk(DEBUG_LOCATION, kNumRpcsToDefaultBalancer,
+                 RpcOptions().set_wait_for_ready(true).set_timeout_ms(10000));
   // Create second channel to new target uri.
   auto channel2 =
       CreateChannel(/*failover_timeout_ms=*/0, kNewServerName, kAuthority);
@@ -1422,7 +1475,8 @@ TEST_P(XdsFederationLoadReportingTest, FederationMultipleLoadReportingTest) {
   for (size_t i = 0; i < kNumRpcsToAuthorityBalancer; ++i) {
     ClientContext context;
     EchoRequest request;
-    RpcOptions().SetupRpc(&context, &request);
+    RpcOptions().set_wait_for_ready(true).set_timeout_ms(10000).SetupRpc(
+        &context, &request);
     EchoResponse response;
     grpc::Status status = stub2->Echo(&context, request, &response);
     EXPECT_TRUE(status.ok()) << "code=" << status.error_code()

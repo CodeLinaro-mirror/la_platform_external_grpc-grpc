@@ -19,13 +19,6 @@
 
 #include "src/core/lib/iomgr/port.h"
 
-#ifdef GRPC_HAVE_LINUX_VSOCK
-
-#include <sys/socket.h>
-#include <linux/vm_sockets.h>
-
-#endif /* GRPC_HAVE_LINUX_VSOCK */
-
 #ifdef GRPC_HAVE_UNIX_SOCKET
 
 #include <string.h>
@@ -40,18 +33,16 @@
 #include <sys/un.h>
 #endif  // GPR_WINDOWS
 
+#include <grpc/support/alloc.h>
+
 #include "absl/log/check.h"
 #include "absl/strings/str_cat.h"
-
-#include <grpc/support/alloc.h>
-#include <grpc/support/log.h>
-
 #include "src/core/lib/address_utils/parse_address.h"
-#include "src/core/lib/gpr/useful.h"
-#include "src/core/lib/gprpp/crash.h"
 #include "src/core/lib/iomgr/sockaddr.h"
 #include "src/core/lib/iomgr/unix_sockets_posix.h"
 #include "src/core/lib/transport/error_utils.h"
+#include "src/core/util/crash.h"
+#include "src/core/util/useful.h"
 
 void grpc_create_socketpair_if_unix(int sv[2]) {
 #ifdef GPR_WINDOWS

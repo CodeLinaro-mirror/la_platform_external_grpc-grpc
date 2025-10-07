@@ -18,13 +18,12 @@
 
 #include "src/core/xds/grpc/certificate_provider_store.h"
 
-#include "absl/strings/str_cat.h"
-
 #include <grpc/support/json.h>
-#include <grpc/support/log.h>
 #include <grpc/support/port_platform.h>
 
-#include "src/core/lib/config/core_configuration.h"
+#include "absl/log/log.h"
+#include "absl/strings/str_cat.h"
+#include "src/core/config/core_configuration.h"
 #include "src/core/lib/security/certificate_provider/certificate_provider_registry.h"
 
 namespace grpc_core {
@@ -131,8 +130,8 @@ CertificateProviderStore::CreateCertificateProviderLocked(
     // This should never happen since an entry is only inserted in the
     // plugin_config_map_ if the corresponding factory was found when parsing
     // the xDS bootstrap file.
-    gpr_log(GPR_ERROR, "Certificate provider factory %s not found",
-            plugin_config_it->second.plugin_name.c_str());
+    LOG(ERROR) << "Certificate provider factory "
+               << plugin_config_it->second.plugin_name << " not found";
     return nullptr;
   }
   return MakeRefCounted<CertificateProviderWrapper>(

@@ -15,16 +15,15 @@
 // limitations under the License.
 //
 //
+#include <grpcpp/impl/service_type.h>
+#include <grpcpp/server_builder.h>
+
 #include <sstream>
 
 #include "absl/flags/flag.h"
 #include "absl/log/check.h"
-
-#include <grpc/support/log.h>
-#include <grpcpp/impl/service_type.h>
-#include <grpcpp/server_builder.h>
-
-#include "src/core/lib/gprpp/crash.h"
+#include "absl/log/log.h"
+#include "src/core/util/crash.h"
 #include "test/core/test_util/test_config.h"
 #include "test/core/tsi/alts/fake_handshaker/fake_handshaker_server.h"
 #include "test/cpp/util/test_config.h"
@@ -40,8 +39,7 @@ static void RunFakeHandshakerServer(const std::string& server_address,
   grpc::ServerBuilder builder;
   builder.AddListeningPort(server_address, grpc::InsecureServerCredentials());
   builder.RegisterService(service.get());
-  gpr_log(GPR_INFO, "Fake handshaker server listening on %s",
-          server_address.c_str());
+  LOG(INFO) << "Fake handshaker server listening on " << server_address;
   std::unique_ptr<grpc::Server> server = builder.BuildAndStart();
   server->Wait();
 }

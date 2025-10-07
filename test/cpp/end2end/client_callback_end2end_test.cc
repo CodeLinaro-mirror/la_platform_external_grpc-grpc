@@ -16,18 +16,6 @@
 //
 //
 
-#include <algorithm>
-#include <condition_variable>
-#include <functional>
-#include <mutex>
-#include <sstream>
-#include <thread>
-
-#include <gtest/gtest.h>
-
-#include "absl/log/check.h"
-#include "absl/memory/memory.h"
-
 #include <grpcpp/channel.h>
 #include <grpcpp/client_context.h>
 #include <grpcpp/create_channel.h>
@@ -37,9 +25,20 @@
 #include <grpcpp/server_builder.h>
 #include <grpcpp/server_context.h>
 #include <grpcpp/support/client_callback.h>
+#include <gtest/gtest.h>
 
-#include "src/core/lib/gprpp/env.h"
+#include <algorithm>
+#include <condition_variable>
+#include <functional>
+#include <mutex>
+#include <sstream>
+#include <thread>
+
+#include "absl/log/check.h"
+#include "absl/log/log.h"
+#include "absl/memory/memory.h"
 #include "src/core/lib/iomgr/iomgr.h"
+#include "src/core/util/env.h"
 #include "src/proto/grpc/testing/echo.grpc.pb.h"
 #include "test/core/test_util/port.h"
 #include "test/core/test_util/test_config.h"
@@ -81,7 +80,7 @@ std::ostream& operator<<(std::ostream& out, const TestScenario& scenario) {
 void TestScenario::Log() const {
   std::ostringstream out;
   out << *this;
-  gpr_log(GPR_DEBUG, "%s", out.str().c_str());
+  VLOG(2) << out.str();
 }
 
 class ClientCallbackEnd2endTest
@@ -669,7 +668,7 @@ class WriteClient : public grpc::ClientWriteReactor<EchoRequest> {
     }
   }
   void OnDone(const Status& s) override {
-    gpr_log(GPR_INFO, "Sent %d messages", num_msgs_sent_);
+    LOG(INFO) << "Sent " << num_msgs_sent_ << " messages";
     int num_to_send =
         (client_cancel_.cancel)
             ? std::min(num_msgs_to_send_, client_cancel_.ops_before_cancel)
@@ -958,7 +957,7 @@ class ReadClient : public grpc::ClientReadReactor<EchoResponse> {
     }
   }
   void OnDone(const Status& s) override {
-    gpr_log(GPR_INFO, "Read %d messages", reads_complete_);
+    LOG(INFO) << "Read " << reads_complete_ << " messages";
     switch (server_try_cancel_) {
       case DO_NOT_CANCEL:
         if (!client_cancel_.cancel || client_cancel_.ops_before_cancel >
@@ -1056,7 +1055,7 @@ TEST_P(ClientCallbackEnd2endTest, ResponseStreamServerCancelDuring) {
   }
 }
 
-// Server to cancel after writing all the respones to the stream but before
+// Server to cancel after writing all the responses to the stream but before
 // returning to the client
 TEST_P(ClientCallbackEnd2endTest, ResponseStreamServerCancelAfter) {
   ResetStub();
@@ -1119,8 +1118,8 @@ class BidiClient : public grpc::ClientBidiReactor<EchoRequest, EchoResponse> {
     MaybeWrite();
   }
   void OnDone(const Status& s) override {
-    gpr_log(GPR_INFO, "Sent %d messages", writes_complete_);
-    gpr_log(GPR_INFO, "Read %d messages", reads_complete_);
+    LOG(INFO) << "Sent " << writes_complete_ << " messages";
+    LOG(INFO) << "Read " << reads_complete_ << " messages";
     switch (server_try_cancel_) {
       case DO_NOT_CANCEL:
         if (!client_cancel_.cancel ||

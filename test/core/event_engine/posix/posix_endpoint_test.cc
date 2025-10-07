@@ -14,6 +14,10 @@
 
 #include "src/core/lib/event_engine/posix_engine/posix_endpoint.h"
 
+#include <grpc/event_engine/event_engine.h>
+#include <grpc/grpc.h>
+#include <grpc/impl/channel_arg_names.h>
+
 #include <algorithm>
 #include <chrono>
 #include <list>
@@ -24,18 +28,14 @@
 #include <vector>
 
 #include "absl/log/check.h"
+#include "absl/log/log.h"
 #include "absl/status/statusor.h"
 #include "absl/strings/str_cat.h"
 #include "absl/strings/str_split.h"
 #include "absl/strings/string_view.h"
 #include "gtest/gtest.h"
-
-#include <grpc/event_engine/event_engine.h>
-#include <grpc/grpc.h>
-#include <grpc/impl/channel_arg_names.h>
-
+#include "src/core/config/config_vars.h"
 #include "src/core/lib/channel/channel_args.h"
-#include "src/core/lib/config/config_vars.h"
 #include "src/core/lib/event_engine/channel_args_endpoint_config.h"
 #include "src/core/lib/event_engine/poller.h"
 #include "src/core/lib/event_engine/posix_engine/event_poller.h"
@@ -44,10 +44,10 @@
 #include "src/core/lib/event_engine/posix_engine/posix_engine_closure.h"
 #include "src/core/lib/event_engine/posix_engine/tcp_socket_utils.h"
 #include "src/core/lib/event_engine/tcp_socket_utils.h"
-#include "src/core/lib/gprpp/dual_ref_counted.h"
-#include "src/core/lib/gprpp/notification.h"
-#include "src/core/lib/gprpp/ref_counted_ptr.h"
 #include "src/core/lib/resource_quota/resource_quota.h"
+#include "src/core/util/dual_ref_counted.h"
+#include "src/core/util/notification.h"
+#include "src/core/util/ref_counted_ptr.h"
 #include "test/core/event_engine/event_engine_test_utils.h"
 #include "test/core/event_engine/posix/posix_engine_test_utils.h"
 #include "test/core/event_engine/test_suite/posix/oracle_event_engine_posix.h"
@@ -203,7 +203,7 @@ class PosixEndpointTest : public ::testing::TestWithParam<bool> {
     EXPECT_NE(posix_ee_, nullptr);
     scheduler_->ChangeCurrentEventEngine(posix_ee_.get());
     if (poller_ != nullptr) {
-      gpr_log(GPR_INFO, "Using poller: %s", poller_->Name().c_str());
+      LOG(INFO) << "Using poller: " << poller_->Name();
     }
   }
 

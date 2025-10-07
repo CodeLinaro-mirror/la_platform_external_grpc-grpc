@@ -111,9 +111,11 @@
   "grpc.server_max_unrequested_time_in_server"
 /** Channel arg to override the http2 :scheme header */
 #define GRPC_ARG_HTTP2_SCHEME "grpc.http2_scheme"
-/** How many pings can the client send before needing to send a
-   data/header frame? (0 indicates that an infinite number of
-   pings can be sent without sending a data frame or header frame) */
+/** How many pings can the client send before needing to send a data/header
+   frame? (0 indicates that an infinite number of pings can be sent without
+   sending a data frame or header frame).
+   If experiment "max_pings_wo_data_throttle" is enabled, instead of pings being
+   completely blocked, they are throttled. */
 #define GRPC_ARG_HTTP2_MAX_PINGS_WITHOUT_DATA \
   "grpc.http2.max_pings_without_data"
 /** How many misbehaving pings the server can bear before sending goaway and
@@ -257,7 +259,7 @@
    issued by the tcp_write(). By default, this is set to 4. */
 #define GRPC_ARG_TCP_TX_ZEROCOPY_MAX_SIMULT_SENDS \
   "grpc.experimental.tcp_tx_zerocopy_max_simultaneous_sends"
-/* Overrides the TCP socket recieve buffer size, SO_RCVBUF. */
+/* Overrides the TCP socket receive buffer size, SO_RCVBUF. */
 #define GRPC_ARG_TCP_RECEIVE_BUFFER_SIZE "grpc.tcp_receive_buffer_size"
 /* Timeout in milliseconds to use for calls to the grpclb load balancer.
    If 0 or unset, the balancer calls will have no deadline. */
@@ -396,6 +398,10 @@
  * If unspecified, it is unlimited */
 #define GRPC_ARG_MAX_ALLOWED_INCOMING_CONNECTIONS \
   "grpc.max_allowed_incoming_connections"
+/** Configure per-channel or per-server stats plugins. */
+#define GRPC_ARG_EXPERIMENTAL_STATS_PLUGINS "grpc.experimental.stats_plugins"
+/** If non-zero, allow security frames to be sent and received. */
+#define GRPC_ARG_SECURITY_FRAME_ALLOWED "grpc.security_frame_allowed"
 /** \} */
 
 #endif /* GRPC_IMPL_CHANNEL_ARG_NAMES_H */

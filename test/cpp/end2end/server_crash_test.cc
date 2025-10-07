@@ -16,13 +16,7 @@
 //
 //
 
-#include <gtest/gtest.h>
-
-#include "absl/log/check.h"
-#include "absl/memory/memory.h"
-
 #include <grpc/grpc.h>
-#include <grpc/support/log.h>
 #include <grpc/support/time.h>
 #include <grpcpp/channel.h>
 #include <grpcpp/client_context.h>
@@ -30,8 +24,12 @@
 #include <grpcpp/server.h>
 #include <grpcpp/server_builder.h>
 #include <grpcpp/server_context.h>
+#include <gtest/gtest.h>
 
-#include "src/core/lib/gprpp/crash.h"
+#include "absl/log/check.h"
+#include "absl/log/log.h"
+#include "absl/memory/memory.h"
+#include "src/core/util/crash.h"
 #include "src/proto/grpc/testing/duplicate/echo_duplicate.grpc.pb.h"
 #include "src/proto/grpc/testing/echo.grpc.pb.h"
 #include "test/core/test_util/port.h"
@@ -59,7 +57,7 @@ class ServiceImpl final : public grpc::testing::EchoTestService::Service {
     EchoRequest request;
     EchoResponse response;
     while (stream->Read(&request)) {
-      gpr_log(GPR_INFO, "recv msg %s", request.message().c_str());
+      LOG(INFO) << "recv msg " << request.message();
       response.set_message(request.message());
       stream->Write(response);
       gpr_sleep_until(gpr_time_add(gpr_now(GPR_CLOCK_REALTIME),

@@ -16,6 +16,16 @@
 //
 //
 
+#include <grpc/byte_buffer.h>
+#include <grpc/byte_buffer_reader.h>
+#include <grpc/credentials.h>
+#include <grpc/grpc.h>
+#include <grpc/grpc_security.h>
+#include <grpc/impl/channel_arg_names.h>
+#include <grpc/impl/propagation_bits.h>
+#include <grpc/slice.h>
+#include <grpc/status.h>
+#include <grpc/support/time.h>
 #include <stdint.h>
 #include <stdio.h>
 #include <string.h>
@@ -28,23 +38,12 @@
 #include "absl/flags/flag.h"
 #include "absl/flags/parse.h"
 #include "absl/log/check.h"
+#include "absl/log/log.h"
 #include "absl/strings/match.h"
-
-#include <grpc/byte_buffer.h>
-#include <grpc/byte_buffer_reader.h>
-#include <grpc/credentials.h>
-#include <grpc/grpc.h>
-#include <grpc/grpc_security.h>
-#include <grpc/impl/channel_arg_names.h>
-#include <grpc/impl/propagation_bits.h>
-#include <grpc/slice.h>
-#include <grpc/status.h>
-#include <grpc/support/log.h>
-#include <grpc/support/time.h>
-
+#include "src/core/ext/transport/chaotic_good/client/chaotic_good_connector.h"
 #include "src/core/lib/channel/channel_args.h"
-#include "src/core/lib/gpr/useful.h"
 #include "src/core/lib/slice/slice_internal.h"
+#include "src/core/util/useful.h"
 #include "test/core/memory_usage/memstats.h"
 #include "test/core/test_util/test_config.h"
 
@@ -70,7 +69,7 @@ static fling_call calls[100001];
 static void* tag(intptr_t t) { return reinterpret_cast<void*>(t); }
 
 // A call is intentionally divided into two steps. First step is to initiate a
-// call (i.e send and recv metadata). A call is outstanding after we initated,
+// call (i.e send and recv metadata). A call is outstanding after we initiated,
 // so we can measure the call memory usage.
 static void init_ping_pong_request(int call_idx) {
   grpc_metadata_array_init(&calls[call_idx].initial_metadata_recv);
@@ -161,9 +160,9 @@ static MemStats send_snapshot_request(int call_idx, grpc_slice call_type) {
                                               (void*)nullptr, nullptr));
   grpc_completion_queue_next(cq, gpr_inf_future(GPR_CLOCK_REALTIME), nullptr);
 
-  gpr_log(GPR_INFO, "Call %d status %d (%s)", call_idx, calls[call_idx].status,
-          std::string(grpc_core::StringViewFromSlice(calls[call_idx].details))
-              .c_str());
+  LOG(INFO) << "Call " << call_idx << " status " << calls[call_idx].status
+            << " (" << grpc_core::StringViewFromSlice(calls[call_idx].details)
+            << ")";
 
   CHECK_NE(response_payload_recv, nullptr);
   grpc_byte_buffer_reader reader;
@@ -231,6 +230,7 @@ ABSL_FLAG(std::string, target, "localhost:443", "Target host:port");
 ABSL_FLAG(int, warmup, 100, "Warmup iterations");
 ABSL_FLAG(int, benchmark, 1000, "Benchmark iterations");
 ABSL_FLAG(bool, minstack, false, "Use minimal stack");
+ABSL_FLAG(bool, chaotic_good, false, "Use chaotic good");
 
 int main(int argc, char** argv) {
   absl::ParseCommandLine(argc, argv);
@@ -255,10 +255,19 @@ int main(int argc, char** argv) {
     args_vec.push_back(grpc_channel_arg_integer_create(
         const_cast<char*>(GRPC_ARG_MINIMAL_STACK), 1));
   }
+  if (absl::GetFlag(FLAGS_chaotic_good)) {
+    args_vec.push_back(grpc_channel_arg_integer_create(
+        const_cast<char*>(GRPC_ARG_ENABLE_RETRIES), 0));
+  }
   grpc_channel_args args = {args_vec.size(), args_vec.data()};
 
-  channel = grpc_channel_create(absl::GetFlag(FLAGS_target).c_str(),
-                                grpc_insecure_credentials_create(), &args);
+  if (absl::GetFlag(FLAGS_chaotic_good)) {
+    channel = grpc_chaotic_good_channel_create(
+        absl::GetFlag(FLAGS_target).c_str(), &args);
+  } else {
+    channel = grpc_channel_create(absl::GetFlag(FLAGS_target).c_str(),
+                                  grpc_insecure_credentials_create(), &args);
+  }
 
   int call_idx = 0;
   const int warmup_iterations = absl::GetFlag(FLAGS_warmup);

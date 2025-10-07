@@ -21,7 +21,6 @@
 
 #include "absl/status/statusor.h"
 #include "absl/types/optional.h"
-
 #include "src/core/ext/filters/backend_metrics/backend_metric_provider.h"
 #include "src/core/lib/channel/channel_args.h"
 #include "src/core/lib/channel/channel_fwd.h"
@@ -35,6 +34,8 @@ class BackendMetricFilter : public ImplementChannelFilter<BackendMetricFilter> {
  public:
   static const grpc_channel_filter kFilter;
 
+  static absl::string_view TypeName() { return "backend_metric"; }
+
   static absl::StatusOr<std::unique_ptr<BackendMetricFilter>> Create(
       const ChannelArgs& args, ChannelFilter::Args);
 
@@ -44,6 +45,7 @@ class BackendMetricFilter : public ImplementChannelFilter<BackendMetricFilter> {
     static const NoInterceptor OnServerInitialMetadata;
     void OnServerTrailingMetadata(ServerMetadata& md);
     static const NoInterceptor OnClientToServerMessage;
+    static const NoInterceptor OnClientToServerHalfClose;
     static const NoInterceptor OnServerToClientMessage;
     static const NoInterceptor OnFinalize;
   };

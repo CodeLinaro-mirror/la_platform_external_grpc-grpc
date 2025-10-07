@@ -22,6 +22,12 @@
 #ifdef GRPC_POSIX_SOCKET_TCP
 
 #include <arpa/inet.h>
+#include <grpc/credentials.h>
+#include <grpc/grpc.h>
+#include <grpc/grpc_security.h>
+#include <grpc/support/alloc.h>
+#include <openssl/err.h>
+#include <openssl/ssl.h>
 #include <stdlib.h>
 #include <string.h>
 #include <sys/socket.h>
@@ -29,20 +35,11 @@
 
 #include <string>
 
-#include <openssl/err.h>
-#include <openssl/ssl.h>
-
 #include "absl/log/check.h"
+#include "absl/log/log.h"
 #include "absl/strings/str_cat.h"
-
-#include <grpc/credentials.h>
-#include <grpc/grpc.h>
-#include <grpc/grpc_security.h>
-#include <grpc/support/alloc.h>
-#include <grpc/support/log.h>
-
-#include "src/core/lib/gprpp/crash.h"
-#include "src/core/lib/gprpp/thd.h"
+#include "src/core/util/crash.h"
+#include "src/core/util/thd.h"
 #include "test/core/test_util/port.h"
 #include "test/core/test_util/test_config.h"
 #include "test/core/test_util/tls_utils.h"
@@ -89,7 +86,7 @@ static void server_thread(void* arg) {
     CHECK(ev.type == GRPC_QUEUE_TIMEOUT);
   }
 
-  gpr_log(GPR_INFO, "Shutting down server");
+  LOG(INFO) << "Shutting down server";
   grpc_server_shutdown_and_notify(server, cq, nullptr);
   grpc_server_cancel_all_calls(server);
   grpc_completion_queue_shutdown(cq);

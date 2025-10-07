@@ -13,6 +13,9 @@
 // limitations under the License.
 #include <errno.h>
 #include <fcntl.h>
+#include <grpc/event_engine/event_engine.h>
+#include <grpc/grpc.h>
+#include <grpc/impl/channel_arg_names.h>
 #include <poll.h>
 #include <stdlib.h>
 #include <sys/socket.h>
@@ -27,26 +30,21 @@
 #include <vector>
 
 #include "absl/log/check.h"
+#include "absl/log/log.h"
 #include "absl/memory/memory.h"
 #include "absl/status/status.h"
 #include "absl/status/statusor.h"
 #include "absl/strings/str_cat.h"
 #include "absl/strings/str_format.h"
 #include "gtest/gtest.h"
-
-#include <grpc/event_engine/event_engine.h>
-#include <grpc/grpc.h>
-#include <grpc/impl/channel_arg_names.h>
-#include <grpc/support/log.h>
-
 #include "src/core/lib/channel/channel_args.h"
 #include "src/core/lib/event_engine/channel_args_endpoint_config.h"
 #include "src/core/lib/event_engine/posix_engine/posix_engine.h"
 #include "src/core/lib/event_engine/tcp_socket_utils.h"
-#include "src/core/lib/gprpp/crash.h"
-#include "src/core/lib/gprpp/notification.h"
 #include "src/core/lib/resource_quota/memory_quota.h"
 #include "src/core/lib/resource_quota/resource_quota.h"
+#include "src/core/util/crash.h"
+#include "src/core/util/notification.h"
 #include "test/core/event_engine/event_engine_test_utils.h"
 #include "test/core/test_util/port.h"
 #include "test/core/test_util/test_config.h"
@@ -121,7 +119,7 @@ std::vector<int> CreateConnectedSockets(
         pfd.revents = 0;
         int ret = poll(&pfd, 1, 1000);
         if (ret == -1) {
-          gpr_log(GPR_ERROR, "poll() failed during connect; errno=%d", errno);
+          LOG(ERROR) << "poll() failed during connect; errno=" << errno;
           abort();
         } else if (ret == 0) {
           // current connection attempt timed out. It indicates that the

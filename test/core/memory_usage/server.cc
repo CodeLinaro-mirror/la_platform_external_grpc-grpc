@@ -26,16 +26,6 @@
 #include <unistd.h>
 #endif
 
-#include <algorithm>
-#include <string>
-#include <vector>
-
-#include "absl/base/attributes.h"
-#include "absl/flags/flag.h"
-#include "absl/flags/parse.h"
-#include "absl/log/check.h"
-#include "absl/status/status.h"
-
 #include <grpc/byte_buffer.h>
 #include <grpc/credentials.h>
 #include <grpc/grpc.h>
@@ -44,11 +34,21 @@
 #include <grpc/slice.h>
 #include <grpc/status.h>
 #include <grpc/support/alloc.h>
-#include <grpc/support/log.h>
 #include <grpc/support/time.h>
 
+#include <algorithm>
+#include <string>
+#include <vector>
+
+#include "absl/base/attributes.h"
+#include "absl/flags/flag.h"
+#include "absl/flags/parse.h"
+#include "absl/log/check.h"
+#include "absl/log/log.h"
+#include "absl/status/status.h"
+#include "src/core/ext/transport/chaotic_good/server/chaotic_good_server.h"
 #include "src/core/lib/channel/channel_args.h"
-#include "src/core/lib/gprpp/host_port.h"
+#include "src/core/util/host_port.h"
 #include "src/core/xds/grpc/xds_enabled_server.h"
 #include "test/core/end2end/data/ssl_test_data.h"
 #include "test/core/memory_usage/memstats.h"
@@ -59,6 +59,7 @@ ABSL_FLAG(std::string, bind, "", "Bind host:port");
 ABSL_FLAG(bool, secure, false, "Use security");
 ABSL_FLAG(bool, minstack, false, "Use minimal stack");
 ABSL_FLAG(bool, use_xds, false, "Use xDS");
+ABSL_FLAG(bool, chaotic_good, false, "Use chaotic good");
 
 static grpc_completion_queue* cq;
 static grpc_server* server;
@@ -93,7 +94,7 @@ static fling_call calls[1000006];
 
 static void request_call_unary(int call_idx) {
   if (call_idx == static_cast<int>(sizeof(calls) / sizeof(fling_call))) {
-    gpr_log(GPR_INFO, "Used all call slots (10000) on server. Server exit.");
+    LOG(INFO) << "Used all call slots (10000) on server. Server exit.";
     _exit(0);
   }
   grpc_metadata_array_init(&calls[call_idx].request_metadata_recv);
@@ -138,7 +139,7 @@ static void send_snapshot(void* tag, MemStats* snapshot) {
   op++;
   op->op = GRPC_OP_SEND_MESSAGE;
   if (payload_buffer == nullptr) {
-    gpr_log(GPR_INFO, "NULL payload buffer !!!");
+    LOG(INFO) << "NULL payload buffer !!!";
   }
   op->data.send_message.send_message = payload_buffer;
   op++;
@@ -164,8 +165,8 @@ static void OnServingStatusUpdate(void* /*user_data*/, const char* uri,
                                   grpc_serving_status_update update) {
   absl::Status status(static_cast<absl::StatusCode>(update.code),
                       update.error_message);
-  gpr_log(GPR_INFO, "xDS serving status notification: uri=\"%s\", status=%s",
-          uri, status.ToString().c_str());
+  LOG(INFO) << "xDS serving status notification: uri=\"" << uri
+            << "\", status=" << status;
 }
 
 int main(int argc, char** argv) {
@@ -189,7 +190,7 @@ int main(int argc, char** argv) {
   if (addr.empty()) {
     addr = grpc_core::JoinHostPort("::", grpc_pick_unused_port_or_die());
   }
-  gpr_log(GPR_INFO, "creating server on: %s", addr.c_str());
+  LOG(INFO) << "creating server on: " << addr;
 
   cq = grpc_completion_queue_create_for_next(nullptr);
 
@@ -220,7 +221,9 @@ int main(int argc, char** argv) {
   }
 
   MemStats before_server_create = MemStats::Snapshot();
-  if (absl::GetFlag(FLAGS_secure)) {
+  if (absl::GetFlag(FLAGS_chaotic_good)) {
+    grpc_server_add_chaotic_good_port(server, addr.c_str());
+  } else if (absl::GetFlag(FLAGS_secure)) {
     grpc_ssl_pem_key_cert_pair pem_key_cert_pair = {test_server1_key,
                                                     test_server1_cert};
     grpc_server_credentials* ssl_creds = grpc_ssl_server_credentials_create(
@@ -253,7 +256,7 @@ int main(int argc, char** argv) {
 
   while (!shutdown_finished) {
     if (got_sigint && !shutdown_started) {
-      gpr_log(GPR_INFO, "Shutting down due to SIGINT");
+      LOG(INFO) << "Shutting down due to SIGINT";
 
       shutdown_cq = grpc_completion_queue_create_for_pluck(nullptr);
       grpc_server_shutdown_and_notify(server, shutdown_cq, tag(1000));
@@ -301,7 +304,7 @@ int main(int argc, char** argv) {
               current_snapshot = MemStats::Snapshot();
               send_snapshot(s, &current_snapshot);
             } else {
-              gpr_log(GPR_ERROR, "Wrong call method");
+              LOG(ERROR) << "Wrong call method";
             }
             break;
           case FLING_SERVER_SEND_INIT_METADATA:

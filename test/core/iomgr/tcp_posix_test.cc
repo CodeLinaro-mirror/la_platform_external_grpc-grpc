@@ -17,38 +17,32 @@
 //
 
 #include "absl/time/time.h"
-
 #include "src/core/lib/channel/channel_args.h"
-#include "src/core/lib/gprpp/notification.h"
-#include "src/core/lib/gprpp/time.h"
 #include "src/core/lib/iomgr/port.h"
+#include "src/core/util/notification.h"
+#include "src/core/util/time.h"
 
 // This test won't work except with posix sockets enabled
 #ifdef GRPC_POSIX_SOCKET_TCP
 
 #include <errno.h>
 #include <fcntl.h>
+#include <grpc/grpc.h>
+#include <grpc/support/alloc.h>
+#include <grpc/support/time.h>
+#include <gtest/gtest.h>
 #include <limits.h>
 #include <string.h>
 #include <sys/socket.h>
 #include <sys/types.h>
 #include <unistd.h>
 
-#include <gtest/gtest.h>
-
 #include "absl/log/check.h"
-
-#include <grpc/grpc.h>
-#include <grpc/support/alloc.h>
-#include <grpc/support/log.h>
-#include <grpc/support/time.h>
-
+#include "absl/log/log.h"
 #include "src/core/lib/event_engine/channel_args_endpoint_config.h"
 #include "src/core/lib/event_engine/default_event_engine.h"
 #include "src/core/lib/event_engine/posix.h"
 #include "src/core/lib/event_engine/shim.h"
-#include "src/core/lib/gpr/useful.h"
-#include "src/core/lib/gprpp/crash.h"
 #include "src/core/lib/iomgr/buffer_list.h"
 #include "src/core/lib/iomgr/ev_posix.h"
 #include "src/core/lib/iomgr/event_engine_shims/endpoint.h"
@@ -56,6 +50,8 @@
 #include "src/core/lib/iomgr/socket_utils_posix.h"
 #include "src/core/lib/iomgr/tcp_posix.h"
 #include "src/core/lib/slice/slice_internal.h"
+#include "src/core/util/crash.h"
+#include "src/core/util/useful.h"
 #include "test/core/iomgr/endpoint_tests.h"
 #include "test/core/test_util/test_config.h"
 
@@ -171,8 +167,8 @@ static void read_cb(void* user_data, grpc_error_handle error) {
   read_bytes = count_slices(state->incoming.slices, state->incoming.count,
                             &current_data);
   state->read_bytes += read_bytes;
-  gpr_log(GPR_INFO, "Read %" PRIuPTR " bytes of %" PRIuPTR, read_bytes,
-          state->target_read_bytes);
+  LOG(INFO) << "Read " << read_bytes << " bytes of "
+            << state->target_read_bytes;
   if (state->read_bytes >= state->target_read_bytes) {
     CHECK(GRPC_LOG_IF_ERROR("kick", grpc_pollset_kick(g_pollset, nullptr)));
     gpr_mu_unlock(g_mu);
@@ -195,8 +191,8 @@ static void read_test(size_t num_bytes, size_t slice_size,
       grpc_timeout_milliseconds_to_deadline(kDeadlineMillis));
   grpc_core::ExecCtx exec_ctx;
 
-  gpr_log(GPR_INFO, "Read test of size %" PRIuPTR ", slice size %" PRIuPTR,
-          num_bytes, slice_size);
+  LOG(INFO) << "Read test of size " << num_bytes << ", slice size "
+            << slice_size;
 
   create_sockets(sv);
 
@@ -218,7 +214,7 @@ static void read_test(size_t num_bytes, size_t slice_size,
   grpc_endpoint_add_to_pollset(ep, g_pollset);
 
   written_bytes = fill_socket_partial(sv[0], num_bytes);
-  gpr_log(GPR_INFO, "Wrote %" PRIuPTR " bytes", written_bytes);
+  LOG(INFO) << "Wrote " << written_bytes << " bytes";
 
   state.ep = ep;
   state.read_bytes = 0;
@@ -260,7 +256,7 @@ static void large_read_test(size_t slice_size, int min_progress_size) {
       grpc_timeout_milliseconds_to_deadline(kDeadlineMillis));
   grpc_core::ExecCtx exec_ctx;
 
-  gpr_log(GPR_INFO, "Start large read test, slice size %" PRIuPTR, slice_size);
+  LOG(INFO) << "Start large read test, slice size " << slice_size;
 
   create_sockets(sv);
 
@@ -282,7 +278,7 @@ static void large_read_test(size_t slice_size, int min_progress_size) {
   grpc_endpoint_add_to_pollset(ep, g_pollset);
 
   written_bytes = fill_socket(sv[0]);
-  gpr_log(GPR_INFO, "Wrote %" PRIuPTR " bytes", written_bytes);
+  LOG(INFO) << "Wrote " << written_bytes << " bytes";
 
   state.ep = ep;
   state.read_bytes = 0;
@@ -320,7 +316,8 @@ struct write_socket_state {
 
 static grpc_slice* allocate_blocks(size_t num_bytes, size_t slice_size,
                                    size_t* num_blocks, uint8_t* current_data) {
-  size_t nslices = num_bytes / slice_size + (num_bytes % slice_size ? 1u : 0u);
+  size_t nslices =
+      (num_bytes / slice_size) + (num_bytes % slice_size ? 1u : 0u);
   grpc_slice* slices =
       static_cast<grpc_slice*>(gpr_malloc(sizeof(grpc_slice) * nslices));
   size_t num_bytes_left = num_bytes;
@@ -411,9 +408,8 @@ static void write_test(size_t num_bytes, size_t slice_size) {
       grpc_timeout_milliseconds_to_deadline(kDeadlineMillis));
   grpc_core::ExecCtx exec_ctx;
 
-  gpr_log(GPR_INFO,
-          "Start write test with %" PRIuPTR " bytes, slice size %" PRIuPTR,
-          num_bytes, slice_size);
+  LOG(INFO) << "Start write test with " << num_bytes << " bytes, slice size "
+            << slice_size;
 
   create_sockets(sv);
 
@@ -496,9 +492,8 @@ static void release_fd_test(size_t num_bytes, size_t slice_size) {
   GRPC_CLOSURE_INIT(&fd_released_cb, &on_fd_released, &rel_fd,
                     grpc_schedule_on_exec_ctx);
 
-  gpr_log(GPR_INFO,
-          "Release fd read_test of size %" PRIuPTR ", slice size %" PRIuPTR,
-          num_bytes, slice_size);
+  LOG(INFO) << "Release fd read_test of size " << num_bytes << ", slice size "
+            << slice_size;
 
   create_sockets(sv);
 
@@ -538,7 +533,7 @@ static void release_fd_test(size_t num_bytes, size_t slice_size) {
   grpc_endpoint_add_to_pollset(ep, g_pollset);
 
   written_bytes = fill_socket_partial(sv[0], num_bytes);
-  gpr_log(GPR_INFO, "Wrote %" PRIuPTR " bytes", written_bytes);
+  LOG(INFO) << "Wrote " << written_bytes << " bytes";
 
   state.ep = ep;
   state.read_bytes = 0;
@@ -555,8 +550,8 @@ static void release_fd_test(size_t num_bytes, size_t slice_size) {
     grpc_pollset_worker* worker = nullptr;
     CHECK(GRPC_LOG_IF_ERROR("pollset_work",
                             grpc_pollset_work(g_pollset, &worker, deadline)));
-    gpr_log(GPR_DEBUG, "wakeup: read=%" PRIdPTR " target=%" PRIdPTR,
-            state.read_bytes, state.target_read_bytes);
+    VLOG(2) << "wakeup: read=" << state.read_bytes
+            << " target=" << state.target_read_bytes;
     gpr_mu_unlock(g_mu);
     grpc_core::ExecCtx::Get()->Flush();
     gpr_mu_lock(g_mu);

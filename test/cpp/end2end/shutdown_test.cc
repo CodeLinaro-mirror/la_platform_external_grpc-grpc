@@ -16,14 +16,7 @@
 //
 //
 
-#include <thread>
-
-#include <gtest/gtest.h>
-
-#include "absl/log/check.h"
-
 #include <grpc/grpc.h>
-#include <grpc/support/log.h>
 #include <grpc/support/sync.h>
 #include <grpcpp/channel.h>
 #include <grpcpp/client_context.h>
@@ -31,9 +24,14 @@
 #include <grpcpp/server.h>
 #include <grpcpp/server_builder.h>
 #include <grpcpp/server_context.h>
+#include <gtest/gtest.h>
 
-#include "src/core/lib/gprpp/crash.h"
-#include "src/core/lib/gprpp/env.h"
+#include <thread>
+
+#include "absl/log/check.h"
+#include "absl/log/log.h"
+#include "src/core/util/crash.h"
+#include "src/core/util/env.h"
 #include "src/proto/grpc/testing/echo.grpc.pb.h"
 #include "test/core/test_util/port.h"
 #include "test/core/test_util/test_config.h"
@@ -132,7 +130,7 @@ std::vector<string> GetAllCredentialsTypeList() {
   for (const string& type : credentials_types) {
     credentials_type_list.append(" " + type);
   }
-  gpr_log(GPR_INFO, "%s", credentials_type_list.c_str());
+  LOG(INFO) << credentials_type_list;
   return credentials_types;
 }
 

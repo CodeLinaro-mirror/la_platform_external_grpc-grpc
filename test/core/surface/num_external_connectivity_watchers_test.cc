@@ -16,24 +16,22 @@
 //
 //
 
-#include <stddef.h>
-
-#include <string>
-
-#include "gtest/gtest.h"
-
 #include <grpc/credentials.h>
 #include <grpc/grpc.h>
 #include <grpc/grpc_security.h>
 #include <grpc/impl/channel_arg_names.h>
 #include <grpc/slice.h>
-#include <grpc/support/log.h>
 #include <grpc/support/time.h>
+#include <stddef.h>
 
+#include <string>
+
+#include "absl/log/log.h"
+#include "gtest/gtest.h"
 #include "src/core/lib/channel/channel_args.h"
-#include "src/core/lib/gprpp/host_port.h"
 #include "src/core/lib/iomgr/error.h"
 #include "src/core/lib/iomgr/exec_ctx.h"
+#include "src/core/util/host_port.h"
 #include "test/core/test_util/port.h"
 #include "test/core/test_util/test_config.h"
 #include "test/core/test_util/tls_utils.h"
@@ -44,6 +42,9 @@ typedef struct test_fixture {
   const char* name;
   grpc_channel* (*create_channel)(const char* addr);
 } test_fixture;
+
+class NumExternalConnectivityWatchersTest
+    : public ::testing::TestWithParam<test_fixture> {};
 
 static size_t next_tag = 1;
 
@@ -73,8 +74,6 @@ static void channel_idle_poll_for_timeout(grpc_channel* channel,
 // Test to make sure that "connectivity watcher" structs are free'd just
 // after, if their corresponding timeouts occur.
 static void run_timeouts_test(const test_fixture* fixture) {
-  gpr_log(GPR_INFO, "TEST: %s", fixture->name);
-
   grpc_init();
   std::string addr =
       grpc_core::JoinHostPort("localhost", grpc_pick_unused_port_or_die());
@@ -122,8 +121,6 @@ static void run_timeouts_test(const test_fixture* fixture) {
 // of a polling call.
 static void run_channel_shutdown_before_timeout_test(
     const test_fixture* fixture) {
-  gpr_log(GPR_INFO, "TEST: %s", fixture->name);
-
   grpc_init();
   std::string addr =
       grpc_core::JoinHostPort("localhost", grpc_pick_unused_port_or_die());
@@ -195,13 +192,17 @@ static const test_fixture secure_test = {
     secure_test_create_channel,
 };
 
-TEST(NumExternalConnectivityWatchersTest, MainTest) {
-  run_timeouts_test(&insecure_test);
-  run_timeouts_test(&secure_test);
-
-  run_channel_shutdown_before_timeout_test(&insecure_test);
-  run_channel_shutdown_before_timeout_test(&secure_test);
+TEST_P(NumExternalConnectivityWatchersTest, Timeouts) {
+  run_timeouts_test(&GetParam());
 }
+
+TEST_P(NumExternalConnectivityWatchersTest, ChannelShutdownBeforeTimeout) {
+  run_channel_shutdown_before_timeout_test(&GetParam());
+}
+
+INSTANTIATE_TEST_SUITE_P(NumExternalConnectivityWatchersTest,
+                         NumExternalConnectivityWatchersTest,
+                         ::testing::Values(insecure_test, secure_test));
 
 int main(int argc, char** argv) {
   grpc::testing::TestEnvironment env(&argc, argv);

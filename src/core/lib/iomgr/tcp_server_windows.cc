@@ -22,31 +22,28 @@
 
 #ifdef GRPC_WINSOCK_SOCKET
 
+#include <grpc/event_engine/endpoint_config.h>
+#include <grpc/event_engine/event_engine.h>
+#include <grpc/event_engine/memory_allocator.h>
+#include <grpc/support/alloc.h>
+#include <grpc/support/log_windows.h>
+#include <grpc/support/string_util.h>
+#include <grpc/support/sync.h>
+#include <grpc/support/time.h>
 #include <inttypes.h>
 #include <io.h>
 
 #include <vector>
 
 #include "absl/log/check.h"
+#include "absl/log/log.h"
 #include "absl/strings/str_cat.h"
-
-#include <grpc/event_engine/endpoint_config.h>
-#include <grpc/event_engine/event_engine.h>
-#include <grpc/event_engine/memory_allocator.h>
-#include <grpc/support/alloc.h>
-#include <grpc/support/log.h>
-#include <grpc/support/log_windows.h>
-#include <grpc/support/string_util.h>
-#include <grpc/support/sync.h>
-#include <grpc/support/time.h>
-
 #include "src/core/lib/address_utils/sockaddr_utils.h"
 #include "src/core/lib/event_engine/memory_allocator_factory.h"
 #include "src/core/lib/event_engine/resolved_address_internal.h"
 #include "src/core/lib/event_engine/tcp_socket_utils.h"
 #include "src/core/lib/event_engine/windows/windows_engine.h"
 #include "src/core/lib/event_engine/windows/windows_listener.h"
-#include "src/core/lib/gprpp/crash.h"
 #include "src/core/lib/iomgr/closure.h"
 #include "src/core/lib/iomgr/event_engine_shims/closure.h"
 #include "src/core/lib/iomgr/event_engine_shims/endpoint.h"
@@ -60,6 +57,7 @@
 #include "src/core/lib/resource_quota/api.h"
 #include "src/core/lib/resource_quota/resource_quota.h"
 #include "src/core/lib/slice/slice_internal.h"
+#include "src/core/util/crash.h"
 
 #define MIN_SAFE_ACCEPT_QUEUE_SIZE 100
 
@@ -294,14 +292,9 @@ static grpc_error_handle prepare_socket(SOCKET sock,
 
 failure:
   CHECK(!error.ok());
-  auto addr_uri = grpc_sockaddr_to_uri(addr);
-  error = grpc_error_set_int(
-      grpc_error_set_str(
-          GRPC_ERROR_CREATE_REFERENCING("Failed to prepare server socket",
-                                        &error, 1),
-          grpc_core::StatusStrProperty::kTargetAddress,
-          addr_uri.ok() ? *addr_uri : addr_uri.status().ToString()),
-      grpc_core::StatusIntProperty::kFd, (intptr_t)sock);
+  error = grpc_error_set_int(GRPC_ERROR_CREATE_REFERENCING(
+                                 "Failed to prepare server socket", &error, 1),
+                             grpc_core::StatusIntProperty::kFd, (intptr_t)sock);
   if (sock != INVALID_SOCKET) closesocket(sock);
   return error;
 }
@@ -378,7 +371,7 @@ static void on_accept(void* arg, grpc_error_handle error) {
   grpc_winsocket_callback_info* info = &sp->socket->read_info;
   grpc_endpoint* ep = NULL;
   grpc_resolved_address peer_name;
-  DWORD transfered_bytes;
+  DWORD transferred_bytes;
   DWORD flags;
   BOOL wsa_success;
   int err;
@@ -391,21 +384,21 @@ static void on_accept(void* arg, grpc_error_handle error) {
   // this is necessary in the read/write case, it's useless for the accept
   // case. We only need to adjust the pending callback count
   if (!error.ok()) {
-    gpr_log(GPR_INFO, "Skipping on_accept due to error: %s",
-            grpc_core::StatusToString(error).c_str());
+    VLOG(2) << "Skipping on_accept due to error: "
+            << grpc_core::StatusToString(error);
 
     gpr_mu_unlock(&sp->server->mu);
     return;
   }
   // The IOCP notified us of a completed operation. Let's grab the results,
   // and act accordingly.
-  transfered_bytes = 0;
+  transferred_bytes = 0;
   wsa_success = WSAGetOverlappedResult(sock, &info->overlapped,
-                                       &transfered_bytes, FALSE, &flags);
+                                       &transferred_bytes, FALSE, &flags);
   if (!wsa_success) {
     if (!sp->shutting_down) {
       char* utf8_message = gpr_format_message(WSAGetLastError());
-      gpr_log(GPR_ERROR, "on_accept error: %s", utf8_message);
+      LOG(ERROR) << "on_accept error: " << utf8_message;
       gpr_free(utf8_message);
     }
     closesocket(sock);
@@ -415,7 +408,7 @@ static void on_accept(void* arg, grpc_error_handle error) {
                        (char*)&sp->socket->socket, sizeof(sp->socket->socket));
       if (err) {
         char* utf8_message = gpr_format_message(WSAGetLastError());
-        gpr_log(GPR_ERROR, "setsockopt error: %s", utf8_message);
+        LOG(ERROR) << "setsockopt error: " << utf8_message;
         gpr_free(utf8_message);
       }
       int peer_name_len = (int)peer_name.len;
@@ -427,12 +420,11 @@ static void on_accept(void* arg, grpc_error_handle error) {
         if (addr_uri.ok()) {
           peer_name_string = addr_uri.value();
         } else {
-          gpr_log(GPR_ERROR, "invalid peer name: %s",
-                  addr_uri.status().ToString().c_str());
+          LOG(ERROR) << "invalid peer name: " << addr_uri.status();
         }
       } else {
         char* utf8_message = gpr_format_message(WSAGetLastError());
-        gpr_log(GPR_ERROR, "getpeername error: %s", utf8_message);
+        LOG(ERROR) << "getpeername error: " << utf8_message;
         gpr_free(utf8_message);
       }
       std::string fd_name = absl::StrCat("tcp_server:", peer_name_string);

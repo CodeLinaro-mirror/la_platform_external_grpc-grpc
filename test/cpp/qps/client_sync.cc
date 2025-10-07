@@ -16,6 +16,14 @@
 //
 //
 
+#include <grpc/grpc.h>
+#include <grpc/support/alloc.h>
+#include <grpc/support/time.h>
+#include <grpcpp/channel.h>
+#include <grpcpp/client_context.h>
+#include <grpcpp/server.h>
+#include <grpcpp/server_builder.h>
+
 #include <chrono>
 #include <memory>
 #include <mutex>
@@ -25,17 +33,8 @@
 #include <vector>
 
 #include "absl/log/check.h"
-
-#include <grpc/grpc.h>
-#include <grpc/support/alloc.h>
-#include <grpc/support/log.h>
-#include <grpc/support/time.h>
-#include <grpcpp/channel.h>
-#include <grpcpp/client_context.h>
-#include <grpcpp/server.h>
-#include <grpcpp/server_builder.h>
-
-#include "src/core/lib/gprpp/crash.h"
+#include "absl/log/log.h"
+#include "src/core/util/crash.h"
 #include "src/proto/grpc/testing/benchmark_service.grpc.pb.h"
 #include "test/cpp/qps/client.h"
 #include "test/cpp/qps/interarrival.h"
@@ -182,8 +181,8 @@ class SynchronousStreamingClient : public SynchronousClient {
     if (!s.ok()) {
       std::lock_guard<std::mutex> l(stream_mu_[thread_idx]);
       if (!shutdown_[thread_idx].val) {
-        gpr_log(GPR_ERROR, "Stream %" PRIuPTR " received an error %s",
-                thread_idx, s.error_message().c_str());
+        LOG(ERROR) << "Stream " << thread_idx << " received an error "
+                   << s.error_message();
       }
     }
     // Lock the stream_mu_ now because the client context could change

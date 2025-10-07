@@ -16,29 +16,24 @@
 //
 //
 
+#include <grpc/grpc.h>
 #include <string.h>
 
 #include <cstdint>
 #include <limits>
 
 #include "absl/log/check.h"
-
-#include <grpc/grpc.h>
-#include <grpc/support/log.h>
-
+#include "absl/log/log.h"
 #include "src/core/lib/debug/trace.h"
-#include "src/core/lib/gprpp/crash.h"
-#include "src/core/lib/gprpp/time.h"
 #include "src/core/lib/iomgr/iomgr_internal.h"
 #include "src/core/lib/iomgr/port.h"
 #include "src/core/lib/iomgr/timer.h"
+#include "src/core/util/crash.h"
+#include "src/core/util/time.h"
 #include "test/core/test_util/test_config.h"
 #include "test/core/test_util/tracer_util.h"
 
 #define MAX_CB 30
-
-extern grpc_core::TraceFlag grpc_timer_trace;
-extern grpc_core::TraceFlag grpc_timer_check_trace;
 
 static int cb_called[MAX_CB][2];
 static const int64_t kHoursIn25Days = 25 * 24;
@@ -50,15 +45,17 @@ static void cb(void* arg, grpc_error_handle error) {
 }
 
 static void add_test(void) {
+  if (grpc_core::IsTimeCachingInPartyEnabled()) return;
+
   int i;
   grpc_timer timers[20];
   grpc_core::ExecCtx exec_ctx;
 
-  gpr_log(GPR_INFO, "add_test");
+  LOG(INFO) << "add_test";
 
   grpc_timer_list_init();
-  grpc_core::testing::grpc_tracer_enable_flag(&grpc_timer_trace);
-  grpc_core::testing::grpc_tracer_enable_flag(&grpc_timer_check_trace);
+  grpc_core::testing::grpc_tracer_enable_flag(&grpc_core::timer_trace);
+  grpc_core::testing::grpc_tracer_enable_flag(&grpc_core::timer_check_trace);
   memset(cb_called, 0, sizeof(cb_called));
 
   grpc_core::Timestamp start = grpc_core::Timestamp::Now();
@@ -119,16 +116,18 @@ static void add_test(void) {
 
 // Cleaning up a list with pending timers.
 void destruction_test(void) {
+  if (grpc_core::IsTimeCachingInPartyEnabled()) return;
+
   grpc_timer timers[5];
   grpc_core::ExecCtx exec_ctx;
 
-  gpr_log(GPR_INFO, "destruction_test");
+  LOG(INFO) << "destruction_test";
 
   grpc_core::ExecCtx::Get()->TestOnlySetNow(
       grpc_core::Timestamp::FromMillisecondsAfterProcessEpoch(0));
   grpc_timer_list_init();
-  grpc_core::testing::grpc_tracer_enable_flag(&grpc_timer_trace);
-  grpc_core::testing::grpc_tracer_enable_flag(&grpc_timer_check_trace);
+  grpc_core::testing::grpc_tracer_enable_flag(&grpc_core::timer_trace);
+  grpc_core::testing::grpc_tracer_enable_flag(&grpc_core::timer_check_trace);
   memset(cb_called, 0, sizeof(cb_called));
 
   grpc_timer_init(
@@ -176,16 +175,18 @@ void destruction_test(void) {
 //  4) Shuts down the timer list
 // https://github.com/grpc/grpc/issues/15904
 void long_running_service_cleanup_test(void) {
+  if (grpc_core::IsTimeCachingInPartyEnabled()) return;
+
   grpc_timer timers[4];
   grpc_core::ExecCtx exec_ctx;
 
-  gpr_log(GPR_INFO, "long_running_service_cleanup_test");
+  LOG(INFO) << "long_running_service_cleanup_test";
 
   grpc_core::Timestamp now = grpc_core::Timestamp::Now();
   CHECK(now.milliseconds_after_process_epoch() >= k25Days.millis());
   grpc_timer_list_init();
-  grpc_core::testing::grpc_tracer_enable_flag(&grpc_timer_trace);
-  grpc_core::testing::grpc_tracer_enable_flag(&grpc_timer_check_trace);
+  grpc_core::testing::grpc_tracer_enable_flag(&grpc_core::timer_trace);
+  grpc_core::testing::grpc_tracer_enable_flag(&grpc_core::timer_check_trace);
   memset(cb_called, 0, sizeof(cb_called));
 
   grpc_timer_init(
@@ -240,7 +241,7 @@ int main(int argc, char** argv) {
     grpc_core::ExecCtx exec_ctx;
     grpc_set_default_iomgr_platform();
     grpc_iomgr_platform_init();
-    gpr_set_log_verbosity(GPR_LOG_SEVERITY_DEBUG);
+    grpc_set_absl_verbosity_debug();
     add_test();
     destruction_test();
     grpc_iomgr_platform_shutdown();
@@ -259,7 +260,7 @@ int main(int argc, char** argv) {
     grpc_core::ExecCtx exec_ctx;
     grpc_set_default_iomgr_platform();
     grpc_iomgr_platform_init();
-    gpr_set_log_verbosity(GPR_LOG_SEVERITY_DEBUG);
+    grpc_set_absl_verbosity_debug();
     long_running_service_cleanup_test();
     add_test();
     destruction_test();

@@ -14,6 +14,8 @@
 
 #include "src/core/server/server_config_selector_filter.h"
 
+#include <grpc/support/port_platform.h>
+
 #include <functional>
 #include <memory>
 #include <utility>
@@ -23,17 +25,9 @@
 #include "absl/status/status.h"
 #include "absl/status/statusor.h"
 #include "absl/types/optional.h"
-
-#include <grpc/support/log.h>
-#include <grpc/support/port_platform.h>
-
 #include "src/core/lib/channel/channel_args.h"
-#include "src/core/lib/channel/context.h"
 #include "src/core/lib/channel/promise_based_filter.h"
 #include "src/core/lib/event_engine/event_engine_context.h"
-#include "src/core/lib/gprpp/ref_counted_ptr.h"
-#include "src/core/lib/gprpp/status_helper.h"
-#include "src/core/lib/gprpp/sync.h"
 #include "src/core/lib/promise/arena_promise.h"
 #include "src/core/lib/promise/context.h"
 #include "src/core/lib/promise/promise.h"
@@ -43,6 +37,10 @@
 #include "src/core/server/server_config_selector.h"
 #include "src/core/service_config/service_config.h"
 #include "src/core/service_config/service_config_call_data.h"
+#include "src/core/util/latent_see.h"
+#include "src/core/util/ref_counted_ptr.h"
+#include "src/core/util/status_helper.h"
+#include "src/core/util/sync.h"
 
 namespace grpc_core {
 
@@ -55,6 +53,10 @@ class ServerConfigSelectorFilter final
   explicit ServerConfigSelectorFilter(
       RefCountedPtr<ServerConfigSelectorProvider>
           server_config_selector_provider);
+
+  static absl::string_view TypeName() {
+    return "server_config_selector_filter";
+  }
 
   ServerConfigSelectorFilter(const ServerConfigSelectorFilter&) = delete;
   ServerConfigSelectorFilter& operator=(const ServerConfigSelectorFilter&) =
@@ -72,6 +74,7 @@ class ServerConfigSelectorFilter final
     static const NoInterceptor OnServerInitialMetadata;
     static const NoInterceptor OnServerTrailingMetadata;
     static const NoInterceptor OnClientToServerMessage;
+    static const NoInterceptor OnClientToServerHalfClose;
     static const NoInterceptor OnServerToClientMessage;
     static const NoInterceptor OnFinalize;
   };
@@ -141,6 +144,8 @@ void ServerConfigSelectorFilter::Orphan() {
 
 absl::Status ServerConfigSelectorFilter::Call::OnClientInitialMetadata(
     ClientMetadata& md, ServerConfigSelectorFilter* filter) {
+  GRPC_LATENT_SEE_INNER_SCOPE(
+      "ServerConfigSelectorFilter::Call::OnClientInitialMetadata");
   auto sel = filter->config_selector();
   if (!sel.ok()) return sel.status();
   auto call_config = sel.value()->GetCallConfig(&md);
@@ -148,8 +153,7 @@ absl::Status ServerConfigSelectorFilter::Call::OnClientInitialMetadata(
     return absl::UnavailableError(StatusToString(call_config.status()));
   }
   auto* service_config_call_data =
-      GetContext<Arena>()->New<ServiceConfigCallData>(
-          GetContext<Arena>(), GetContext<grpc_call_context_element>());
+      GetContext<Arena>()->New<ServiceConfigCallData>(GetContext<Arena>());
   service_config_call_data->SetServiceConfig(
       std::move(call_config->service_config), call_config->method_configs);
   return absl::OkStatus();
@@ -158,13 +162,14 @@ absl::Status ServerConfigSelectorFilter::Call::OnClientInitialMetadata(
 const NoInterceptor ServerConfigSelectorFilter::Call::OnServerInitialMetadata;
 const NoInterceptor ServerConfigSelectorFilter::Call::OnServerTrailingMetadata;
 const NoInterceptor ServerConfigSelectorFilter::Call::OnClientToServerMessage;
+const NoInterceptor ServerConfigSelectorFilter::Call::OnClientToServerHalfClose;
 const NoInterceptor ServerConfigSelectorFilter::Call::OnServerToClientMessage;
 const NoInterceptor ServerConfigSelectorFilter::Call::OnFinalize;
 
 }  // namespace
 
 const grpc_channel_filter kServerConfigSelectorFilter =
-    MakePromiseBasedFilter<ServerConfigSelectorFilter, FilterEndpoint::kServer>(
-        "server_config_selector_filter");
+    MakePromiseBasedFilter<ServerConfigSelectorFilter,
+                           FilterEndpoint::kServer>();
 
 }  // namespace grpc_core

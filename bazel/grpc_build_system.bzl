@@ -30,6 +30,7 @@ Contains macros used throughout the repo.
 load("@build_bazel_rules_apple//apple:ios.bzl", "ios_unit_test")
 load("@build_bazel_rules_apple//apple/testing/default_runner:ios_test_runner.bzl", "ios_test_runner")
 load("@com_google_protobuf//bazel:upb_proto_library.bzl", "upb_proto_library", "upb_proto_reflection_library")
+load("@rules_proto//proto:defs.bzl", "proto_library")
 load("//bazel:cc_grpc_library.bzl", "cc_grpc_library")
 load("//bazel:copts.bzl", "GRPC_DEFAULT_COPTS")
 load("//bazel:experiments.bzl", "EXPERIMENTS", "EXPERIMENT_ENABLES", "EXPERIMENT_POLLERS")
@@ -45,6 +46,7 @@ def if_not_windows(a):
     return select({
         "//:windows": [],
         "//:windows_msvc": [],
+        "//:windows_clang": [],
         "//conditions:default": a,
     })
 
@@ -52,6 +54,7 @@ def if_windows(a):
     return select({
         "//:windows": a,
         "//:windows_msvc": a,
+        "//:windows_clang": a,
         "//conditions:default": [],
     })
 
@@ -67,7 +70,7 @@ def _get_external_deps(external_deps):
         elif dep == "cares":
             ret += select({
                 "//:grpc_no_ares": [],
-                "//conditions:default": ["//external:cares"],
+                "//conditions:default": ["//third_party:cares"],
             })
         elif dep == "cronet_c_for_grpc":
             ret.append("//third_party/objective_c/Cronet:cronet_c_for_grpc")
@@ -82,7 +85,7 @@ def _get_external_deps(external_deps):
         elif dep == "libprotobuf_mutator":
             ret.append("@com_google_libprotobuf_mutator//:libprotobuf_mutator")
         else:
-            ret.append("//external:" + dep)
+            ret.append("//third_party:" + dep)
     return ret
 
 def _update_visibility(visibility):
@@ -114,12 +117,12 @@ def _update_visibility(visibility):
         "grpcpp_gcp_observability": PUBLIC,
         "grpc_resolver_fake": PRIVATE,
         "grpc++_public_hdrs": PUBLIC,
-        "grpc++_test": PRIVATE,
         "http": PRIVATE,
         "httpcli": PRIVATE,
         "iomgr_internal_errqueue": PRIVATE,
         "iomgr_buffer_list": PRIVATE,
         "json_reader_legacy": PRIVATE,
+        "latent_see": PRIVATE,
         "otel_plugin": PRIVATE,
         "public": PUBLIC,
         "ref_counted_ptr": PRIVATE,
@@ -142,6 +145,13 @@ def _update_visibility(visibility):
         else:
             final_visibility.append(rule)
     return [x for x in final_visibility]
+
+def _include_prefix():
+    include_prefix = ""
+    if native.package_name():
+        for _ in native.package_name().split("/"):
+            include_prefix += "../"
+    return include_prefix
 
 def grpc_cc_library(
         name,
@@ -168,7 +178,7 @@ def grpc_cc_library(
       srcs: The source files.
       public_hdrs: The public headers.
       hdrs: The headers.
-      external_deps: External depdendencies to be resolved.
+      external_deps: External dependencies to be resolved.
       defines: Build defines to use.
       deps: cc_library deps.
       select_deps: deps included conditionally.
@@ -190,6 +200,7 @@ def grpc_cc_library(
     if select_deps:
         for select_deps_entry in select_deps:
             deps += select(select_deps_entry)
+    include_prefix = _include_prefix()
     native.cc_library(
         name = name,
         srcs = srcs,
@@ -214,9 +225,9 @@ def grpc_cc_library(
         testonly = testonly,
         linkopts = linkopts,
         includes = [
-            "include",
-            "src/core/ext/upb-gen",  # Once upb code-gen issue is resolved, remove this.
-            "src/core/ext/upbdefs-gen",  # Once upb code-gen issue is resolved, remove this.
+            include_prefix + "include",
+            include_prefix + "src/core/ext/upb-gen",  # Once upb code-gen issue is resolved, remove this.
+            include_prefix + "src/core/ext/upbdefs-gen",  # Once upb code-gen issue is resolved, remove this.
         ],
         alwayslink = alwayslink,
         data = data,
@@ -231,10 +242,30 @@ def grpc_proto_plugin(name, srcs = [], deps = []):
         deps = deps,
     )
 
+def grpc_internal_proto_library(
+        name,
+        srcs = [],
+        deps = [],
+        visibility = None,
+        has_services = False):  # buildifier: disable=unused-variable
+    proto_library(
+        name = name,
+        srcs = srcs,
+        deps = deps,
+        visibility = visibility,
+    )
+
+def grpc_cc_proto_library(name, deps = [], visibility = None):
+    native.cc_proto_library(name = name, deps = deps, visibility = visibility)
+
+# DO NOT USE -- callers should instead be changed to use separate
+# grpc_internal_proto_library(), grpc_cc_proto_library(), and
+# grpc_cc_grpc_library() rules.
 def grpc_proto_library(
         name,
         srcs = [],
         deps = [],
+        visibility = None,
         well_known_protos = False,
         has_services = True,
         use_external = False,
@@ -243,10 +274,32 @@ def grpc_proto_library(
         name = name,
         srcs = srcs,
         deps = deps,
+        visibility = visibility,
         well_known_protos = well_known_protos,
         proto_only = not has_services,
         use_external = use_external,
         generate_mocks = generate_mocks,
+    )
+
+def grpc_cc_grpc_library(
+        name,
+        srcs = [],
+        deps = [],
+        visibility = None,
+        generate_mocks = False):
+    """A wrapper around cc_grpc_library that forces grpc_only=True.
+
+    Callers are expected to have their own proto_library() and
+    cc_proto_library() rules and then use this rule to produce only the
+    gRPC generated code.
+    """
+    cc_grpc_library(
+        name = name,
+        srcs = srcs,
+        deps = deps,
+        visibility = visibility,
+        generate_mocks = generate_mocks,
+        grpc_only = True,
     )
 
 def ios_cc_test(
@@ -284,7 +337,7 @@ def ios_cc_test(
             size = kwargs.get("size"),
             data = kwargs.get("data"),
             tags = ios_tags,
-            minimum_os_version = "9.0",
+            minimum_os_version = "11.0",
             runner = test_runner,
             deps = ios_test_deps,
         )
@@ -525,7 +578,7 @@ def grpc_cc_test(name, srcs = [], deps = [], external_deps = [], args = [], data
         timeout: The test timeout.
         tags: The tags for the test.
         exec_compatible_with: A list of constraint values that must be
-            satisifed for the platform.
+            satisfied for the platform.
         exec_properties: A dictionary of strings that will be added to the
             exec_properties of a platform selected for this target.
         shard_count: The number of shards for this test.
@@ -622,6 +675,7 @@ def grpc_cc_binary(name, srcs = [], deps = [], external_deps = [], args = [], da
         linkopts = if_not_windows(["-pthread"]) + linkopts,
         tags = tags,
         features = features,
+        visibility = visibility,
     )
 
 # buildifier: disable=unnamed-macro
@@ -655,7 +709,7 @@ def grpc_sh_test(name, srcs = [], args = [], data = [], uses_polling = True, siz
         timeout: The test timeout.
         tags: The tags for the test.
         exec_compatible_with: A list of constraint values that must be
-            satisifed for the platform.
+            satisfied for the platform.
         exec_properties: A dictionary of strings that will be added to the
             exec_properties of a platform selected for this target.
         shard_count: The number of shards for this test.
@@ -720,7 +774,7 @@ def grpc_package(name, visibility = "private", features = []):
         features: The features to enable.
     """
     if visibility == "tests":
-        visibility = ["//test:__subpackages__"]
+        visibility = ["//test:__subpackages__", "//src/proto/grpc/testing:__subpackages__"]
     elif visibility == "public":
         visibility = ["//visibility:public"]
     elif visibility == "private":
@@ -734,6 +788,13 @@ def grpc_package(name, visibility = "private", features = []):
             default_visibility = visibility,
             features = features,
         )
+
+def grpc_filegroup(name, srcs, **kwargs):
+    native.filegroup(
+        name = name,
+        srcs = srcs,
+        **kwargs
+    )
 
 def grpc_objc_library(
         name,
@@ -792,4 +853,23 @@ def python_config_settings():
     native.config_setting(
         name = "python3",
         flag_values = {"@bazel_tools//tools/python:python_version": "PY3"},
+    )
+
+# buildifier: disable=unnamed-macro
+def grpc_clang_cl_settings():
+    native.platform(
+        name = "x64_windows-clang-cl",
+        constraint_values = [
+            "@platforms//cpu:x86_64",
+            "@platforms//os:windows",
+            "@bazel_tools//tools/cpp:clang-cl",
+        ],
+    )
+    native.config_setting(
+        name = "windows_clang",
+        constraint_values = [
+            "@platforms//cpu:x86_64",
+            "@platforms//os:windows",
+            "@bazel_tools//tools/cpp:clang-cl",
+        ],
     )

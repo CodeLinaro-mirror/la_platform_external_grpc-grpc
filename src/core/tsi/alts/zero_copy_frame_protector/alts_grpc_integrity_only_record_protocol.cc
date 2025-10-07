@@ -18,19 +18,17 @@
 
 #include "src/core/tsi/alts/zero_copy_frame_protector/alts_grpc_integrity_only_record_protocol.h"
 
+#include <grpc/support/alloc.h>
+#include <grpc/support/port_platform.h>
 #include <string.h>
 
 #include "absl/log/check.h"
-
-#include <grpc/support/alloc.h>
-#include <grpc/support/log.h>
-#include <grpc/support/port_platform.h>
-
-#include "src/core/lib/gprpp/crash.h"
+#include "absl/log/log.h"
 #include "src/core/lib/slice/slice.h"
 #include "src/core/lib/slice/slice_internal.h"
 #include "src/core/tsi/alts/zero_copy_frame_protector/alts_grpc_record_protocol_common.h"
 #include "src/core/tsi/alts/zero_copy_frame_protector/alts_iovec_record_protocol.h"
+#include "src/core/util/crash.h"
 
 // Main struct for alts_grpc_integrity_only_record_protocol.
 typedef struct alts_grpc_integrity_only_record_protocol {
@@ -69,7 +67,7 @@ static tsi_result alts_grpc_integrity_only_extra_copy_protect(
   grpc_status_code status = alts_iovec_record_protocol_integrity_only_protect(
       rp->iovec_rp, rp->iovec_buf, 1, header_iovec, tag_iovec, &error_details);
   if (status != GRPC_STATUS_OK) {
-    gpr_log(GPR_ERROR, "Failed to protect, %s", error_details);
+    LOG(ERROR) << "Failed to protect, " << error_details;
     gpr_free(error_details);
     return TSI_INTERNAL_ERROR;
   }
@@ -84,8 +82,8 @@ static tsi_result alts_grpc_integrity_only_protect(
   // Input sanity check.
   if (rp == nullptr || unprotected_slices == nullptr ||
       protected_slices == nullptr) {
-    gpr_log(GPR_ERROR,
-            "Invalid nullptr arguments to alts_grpc_record_protocol protect.");
+    LOG(ERROR)
+        << "Invalid nullptr arguments to alts_grpc_record_protocol protect.";
     return TSI_INVALID_ARGUMENT;
   }
   alts_grpc_integrity_only_record_protocol* integrity_only_record_protocol =
@@ -109,7 +107,7 @@ static tsi_result alts_grpc_integrity_only_protect(
       rp->iovec_rp, rp->iovec_buf, unprotected_slices->count, header_iovec,
       tag_iovec, &error_details);
   if (status != GRPC_STATUS_OK) {
-    gpr_log(GPR_ERROR, "Failed to protect, %s", error_details);
+    LOG(ERROR) << "Failed to protect, " << error_details;
     gpr_free(error_details);
     return TSI_INTERNAL_ERROR;
   }
@@ -126,13 +124,12 @@ static tsi_result alts_grpc_integrity_only_unprotect(
   // Input sanity check.
   if (rp == nullptr || protected_slices == nullptr ||
       unprotected_slices == nullptr) {
-    gpr_log(
-        GPR_ERROR,
-        "Invalid nullptr arguments to alts_grpc_record_protocol unprotect.");
+    LOG(ERROR)
+        << "Invalid nullptr arguments to alts_grpc_record_protocol unprotect.";
     return TSI_INVALID_ARGUMENT;
   }
   if (protected_slices->length < rp->header_length + rp->tag_length) {
-    gpr_log(GPR_ERROR, "Protected slices do not have sufficient data.");
+    LOG(ERROR) << "Protected slices do not have sufficient data.";
     return TSI_INVALID_ARGUMENT;
   }
   // In this method, rp points to alts_grpc_record_protocol struct
@@ -171,7 +168,7 @@ static tsi_result alts_grpc_integrity_only_unprotect(
       integrity_only_record_protocol->data_sb.count, header_iovec, tag_iovec,
       &error_details);
   if (status != GRPC_STATUS_OK) {
-    gpr_log(GPR_ERROR, "Failed to unprotect, %s", error_details);
+    LOG(ERROR) << "Failed to unprotect, " << error_details;
     gpr_free(error_details);
     return TSI_INTERNAL_ERROR;
   }
@@ -201,8 +198,8 @@ tsi_result alts_grpc_integrity_only_record_protocol_create(
     gsec_aead_crypter* crypter, size_t overflow_size, bool is_client,
     bool is_protect, bool enable_extra_copy, alts_grpc_record_protocol** rp) {
   if (crypter == nullptr || rp == nullptr) {
-    gpr_log(GPR_ERROR,
-            "Invalid nullptr arguments to alts_grpc_record_protocol create.");
+    LOG(ERROR)
+        << "Invalid nullptr arguments to alts_grpc_record_protocol create.";
     return TSI_INVALID_ARGUMENT;
   }
   alts_grpc_integrity_only_record_protocol* impl =

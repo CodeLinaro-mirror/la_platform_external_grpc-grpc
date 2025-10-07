@@ -60,6 +60,7 @@ grpc_cc_library(
     name = "oauth2_utils",
     srcs = ["oauth2_utils.cc"],
     hdrs = ["oauth2_utils.h"],
+    external_deps = ["absl/log:log"],
     language = "C++",
     visibility = ["//test/cpp:__subpackages__"],
     deps = ["//:grpc"],
@@ -68,7 +69,10 @@ grpc_cc_library(
 grpc_cc_test(
     name = "auth_context_test",
     srcs = ["auth_context_test.cc"],
-    external_deps = ["gtest"],
+    external_deps = [
+        "absl/log:log",
+        "gtest",
+    ],
     language = "C++",
     uses_event_engine = False,
     uses_polling = False,
@@ -99,6 +103,7 @@ grpc_cc_test(
     srcs = ["credentials_test.cc"],
     external_deps = [
         "absl/log:check",
+        "absl/log:log",
         "gtest",
     ],
     language = "C++",
@@ -106,6 +111,9 @@ grpc_cc_test(
         "//:gpr",
         "//:grpc",
         "//src/core:channel_args",
+        "//src/core:gcp_service_account_identity_credentials",
+        "//test/core/event_engine:event_engine_test_utils",
+        "//test/core/event_engine/fuzzing_event_engine",
         "//test/core/test_util:grpc_test_util",
         "//test/core/test_util:grpc_test_util_base",
     ],
@@ -144,7 +152,10 @@ grpc_cc_test(
 grpc_cc_test(
     name = "json_token_test",
     srcs = ["json_token_test.cc"],
-    external_deps = ["gtest"],
+    external_deps = [
+        "absl/log:log",
+        "gtest",
+    ],
     language = "C++",
     tags = ["credential_token_tests"],
     uses_event_engine = False,
@@ -177,7 +188,10 @@ grpc_cc_test(
 grpc_cc_test(
     name = "secure_endpoint_test",
     srcs = ["secure_endpoint_test.cc"],
-    external_deps = ["gtest"],
+    external_deps = [
+        "absl/log:log",
+        "gtest",
+    ],
     flaky = True,
     language = "C++",
     deps = [
@@ -193,7 +207,10 @@ grpc_cc_test(
 grpc_cc_test(
     name = "security_connector_test",
     srcs = ["security_connector_test.cc"],
-    external_deps = ["gtest"],
+    external_deps = [
+        "absl/log:log",
+        "gtest",
+    ],
     language = "C++",
     deps = [
         "//:gpr",
@@ -255,7 +272,10 @@ grpc_cc_binary(
 grpc_cc_binary(
     name = "fetch_oauth2",
     srcs = ["fetch_oauth2.cc"],
-    external_deps = ["absl/log:check"],
+    external_deps = [
+        "absl/log:check",
+        "absl/log:log",
+    ],
     language = "C++",
     deps = [
         ":oauth2_utils",
@@ -322,7 +342,10 @@ grpc_cc_test(
 grpc_cc_test(
     name = "alts_security_connector_test",
     srcs = ["alts_security_connector_test.cc"],
-    external_deps = ["gtest"],
+    external_deps = [
+        "absl/log:log",
+        "gtest",
+    ],
     language = "C++",
     deps = [
         "//:gpr",
@@ -345,6 +368,23 @@ grpc_cc_test(
         "//src/core/tsi/test_creds:server1.key",
         "//src/core/tsi/test_creds:server1.pem",
     ],
+    external_deps = [
+        "absl/log:check",
+        "gtest",
+    ],
+    language = "C++",
+    deps = [
+        "//:gpr",
+        "//:grpc",
+        "//src/core:channel_args",
+        "//test/core/test_util:grpc_test_util",
+        "//test/core/test_util:grpc_test_util_base",
+    ],
+)
+
+grpc_cc_test(
+    name = "local_security_connector_test",
+    srcs = ["local_security_connector_test.cc"],
     external_deps = [
         "absl/log:check",
         "gtest",
@@ -416,6 +456,8 @@ grpc_cc_test(
     srcs = ["grpc_tls_certificate_provider_test.cc"],
     data = [
         "//src/core/tsi/test_creds:ca.pem",
+        "//src/core/tsi/test_creds:malformed-cert.pem",
+        "//src/core/tsi/test_creds:malformed-key.pem",
         "//src/core/tsi/test_creds:multi-domain.key",
         "//src/core/tsi/test_creds:multi-domain.pem",
         "//src/core/tsi/test_creds:server0.key",
@@ -440,7 +482,10 @@ grpc_cc_test(
 grpc_cc_test(
     name = "grpc_tls_certificate_verifier_test",
     srcs = ["grpc_tls_certificate_verifier_test.cc"],
-    external_deps = ["gtest"],
+    external_deps = [
+        "absl/log:log",
+        "gtest",
+    ],
     language = "C++",
     deps = [
         "//:gpr",
@@ -602,8 +647,8 @@ grpc_cc_test(
         "//src/core:grpc_crl_provider",
         "//test/core/event_engine:event_engine_test_utils",
         "//test/core/event_engine/fuzzing_event_engine",
-        "//test/core/event_engine/fuzzing_event_engine:fuzzing_event_engine_proto",
-        "//test/core/test_util:fuzz_config_vars_proto",
+        "//test/core/event_engine/fuzzing_event_engine:fuzzing_event_engine_cc_proto",
+        "//test/core/test_util:fuzz_config_vars_cc_proto",
         "//test/core/test_util:grpc_test_util",
         "//test/core/tsi:transport_security_test_lib",
     ],

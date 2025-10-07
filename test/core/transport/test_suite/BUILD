@@ -16,32 +16,40 @@ load(
     "//bazel:grpc_build_system.bzl",
     "grpc_cc_library",
     "grpc_package",
-    "grpc_proto_library",
 )
 load("grpc_transport_test.bzl", "grpc_transport_test")
 
 grpc_package(name = "test/core/transport/test_suite")
 
 grpc_cc_library(
-    name = "fixture",
-    testonly = 1,
-    srcs = ["fixture.cc"],
-    hdrs = ["fixture.h"],
-    deps = [
-        "//:grpc",
-        "//test/core/event_engine/fuzzing_event_engine",
-    ],
-)
-
-grpc_cc_library(
     name = "inproc_fixture",
     testonly = 1,
     srcs = ["inproc_fixture.cc"],
     deps = [
-        "fixture",
+        "test",
         "//src/core:grpc_transport_inproc",
     ],
     alwayslink = 1,
+)
+
+grpc_cc_library(
+    name = "chaotic_good_fixture_helpers",
+    testonly = 1,
+    srcs = ["chaotic_good_fixture_helpers.cc"],
+    hdrs = ["chaotic_good_fixture_helpers.h"],
+    external_deps = [
+        "absl/log:check",
+        "gtest",
+    ],
+    deps = [
+        "test",
+        "//src/core:chaotic_good_client_transport",
+        "//src/core:chaotic_good_server_transport",
+        "//src/core:event_engine_memory_allocator_factory",
+        "//src/core:event_engine_tcp_socket_utils",
+        "//src/core:grpc_promise_endpoint",
+        "//src/core:resource_quota",
+    ],
 )
 
 grpc_cc_library(
@@ -53,13 +61,21 @@ grpc_cc_library(
         "gtest",
     ],
     deps = [
-        "fixture",
-        "//src/core:chaotic_good_client_transport",
-        "//src/core:chaotic_good_server_transport",
-        "//src/core:event_engine_memory_allocator_factory",
-        "//src/core:event_engine_tcp_socket_utils",
-        "//src/core:grpc_promise_endpoint",
-        "//src/core:resource_quota",
+        "chaotic_good_fixture_helpers",
+    ],
+    alwayslink = 1,
+)
+
+grpc_cc_library(
+    name = "chaotic_good_single_connection_fixture",
+    testonly = 1,
+    srcs = ["chaotic_good_single_connection_fixture.cc"],
+    external_deps = [
+        "absl/log:check",
+        "gtest",
+    ],
+    deps = [
+        "chaotic_good_fixture_helpers",
     ],
     alwayslink = 1,
 )
@@ -67,37 +83,16 @@ grpc_cc_library(
 grpc_cc_library(
     name = "test",
     testonly = 1,
-    srcs = ["test.cc"],
-    hdrs = ["test.h"],
+    srcs = ["transport_test.cc"],
+    hdrs = ["transport_test.h"],
     external_deps = [
-        "absl/functional:any_invocable",
+        "absl/log:log",
         "absl/random",
         "absl/random:bit_gen_ref",
-        "absl/strings",
         "gtest",
     ],
     deps = [
-        "fixture",
-        "//:iomgr_timer",
-        "//:promise",
-        "//src/core:cancel_callback",
-        "//src/core:resource_quota",
-        "//src/core:time",
-        "//test/core/event_engine/fuzzing_event_engine",
-        "//test/core/event_engine/fuzzing_event_engine:fuzzing_event_engine_proto",
-    ],
-)
-
-grpc_cc_library(
-    name = "test_main",
-    testonly = 1,
-    srcs = ["test_main.cc"],
-    external_deps = ["absl/random"],
-    deps = [
-        "fixture",
-        "test",
-        "//:grpc_trace",
-        "//test/core/test_util:grpc_test_util",
+        "//test/core/call/yodel:yodel_test",
     ],
 )
 
@@ -135,16 +130,6 @@ grpc_cc_library(
     alwayslink = 1,
 )
 
-grpc_proto_library(
-    name = "fuzzer_proto",
-    srcs = ["fuzzer.proto"],
-    has_services = False,
-    deps = [
-        "//test/core/event_engine/fuzzing_event_engine:fuzzing_event_engine_proto",
-        "//test/core/test_util:fuzz_config_vars_proto",
-    ],
-)
-
 grpc_transport_test(
     name = "inproc",
     deps = [
@@ -162,6 +147,17 @@ grpc_transport_test(
         ":call_content",
         ":call_shapes",
         ":chaotic_good_fixture",
+        ":no_op",
+        ":stress",
+    ],
+)
+
+grpc_transport_test(
+    name = "chaotic_good_single_connection",
+    deps = [
+        ":call_content",
+        ":call_shapes",
+        ":chaotic_good_single_connection_fixture",
         ":no_op",
         ":stress",
     ],

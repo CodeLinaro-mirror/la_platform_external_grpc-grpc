@@ -14,59 +14,79 @@
 // limitations under the License.
 //
 
+#include <grpc/grpc.h>
+
 #include <map>
 #include <memory>
 #include <set>
 #include <string>
 #include <utility>
 
+#include "absl/log/log.h"
 #include "absl/status/status.h"
 #include "absl/status/statusor.h"
 #include "absl/strings/str_cat.h"
 #include "absl/strings/string_view.h"
 #include "absl/time/time.h"
 #include "absl/types/optional.h"
-
-#include <grpc/grpc.h>
-#include <grpc/support/log.h>
-
-#include "src/core/lib/event_engine/default_event_engine.h"
-#include "src/core/lib/gprpp/orphanable.h"
-#include "src/core/lib/gprpp/ref_counted_ptr.h"
+#include "envoy/service/discovery/v3/discovery.pb.h"
+#include "src/core/lib/iomgr/timer_manager.h"
+#include "src/core/util/orphanable.h"
+#include "src/core/util/ref_counted_ptr.h"
 #include "src/core/xds/grpc/xds_bootstrap_grpc.h"
 #include "src/core/xds/grpc/xds_cluster.h"
+#include "src/core/xds/grpc/xds_cluster_parser.h"
 #include "src/core/xds/grpc/xds_endpoint.h"
+#include "src/core/xds/grpc/xds_endpoint_parser.h"
 #include "src/core/xds/grpc/xds_listener.h"
+#include "src/core/xds/grpc/xds_listener_parser.h"
 #include "src/core/xds/grpc/xds_route_config.h"
+#include "src/core/xds/grpc/xds_route_config_parser.h"
 #include "src/core/xds/xds_client/xds_bootstrap.h"
 #include "src/core/xds/xds_client/xds_client.h"
 #include "src/libfuzzer/libfuzzer_macro.h"
-#include "src/proto/grpc/testing/xds/v3/discovery.pb.h"
+#include "test/core/event_engine/event_engine_test_utils.h"
+#include "test/core/event_engine/fuzzing_event_engine/fuzzing_event_engine.h"
 #include "test/core/xds/xds_client_fuzzer.pb.h"
 #include "test/core/xds/xds_client_test_peer.h"
 #include "test/core/xds/xds_transport_fake.h"
+
+using grpc_event_engine::experimental::FuzzingEventEngine;
 
 namespace grpc_core {
 
 class Fuzzer {
  public:
-  explicit Fuzzer(absl::string_view bootstrap_json) {
+  Fuzzer(absl::string_view bootstrap_json,
+         const fuzzing_event_engine::Actions& fuzzing_ee_actions) {
+    event_engine_ = std::make_shared<FuzzingEventEngine>(
+        FuzzingEventEngine::Options(), fuzzing_ee_actions);
+    grpc_timer_manager_set_start_threaded(false);
+    grpc_init();
     auto bootstrap = GrpcXdsBootstrap::Create(bootstrap_json);
     if (!bootstrap.ok()) {
-      gpr_log(GPR_ERROR, "error creating bootstrap: %s",
-              bootstrap.status().ToString().c_str());
+      LOG(ERROR) << "error creating bootstrap: " << bootstrap.status();
       // Leave xds_client_ unset, so Act() will be a no-op.
       return;
     }
-    auto transport_factory = MakeOrphanable<FakeXdsTransportFactory>(
-        []() { Crash("Multiple concurrent reads"); });
-    transport_factory->SetAutoCompleteMessagesFromClient(false);
-    transport_factory->SetAbortOnUndrainedMessages(false);
-    transport_factory_ = transport_factory.get();
+    transport_factory_ = MakeRefCounted<FakeXdsTransportFactory>(
+        []() { Crash("Multiple concurrent reads"); }, event_engine_);
+    transport_factory_->SetAutoCompleteMessagesFromClient(false);
+    transport_factory_->SetAbortOnUndrainedMessages(false);
     xds_client_ = MakeRefCounted<XdsClient>(
-        std::move(*bootstrap), std::move(transport_factory),
-        grpc_event_engine::experimental::GetDefaultEventEngine(),
+        std::move(*bootstrap), transport_factory_, event_engine_,
         /*metrics_reporter=*/nullptr, "foo agent", "foo version");
+  }
+
+  ~Fuzzer() {
+    transport_factory_.reset();
+    xds_client_.reset();
+    event_engine_->FuzzingDone();
+    event_engine_->TickUntilIdle();
+    event_engine_->UnsetGlobalHooks();
+    grpc_event_engine::experimental::WaitForSingleOwner(
+        std::move(event_engine_));
+    grpc_shutdown_blocking();
   }
 
   void Act(const xds_client_fuzzer::Action& action) {
@@ -122,20 +142,18 @@ class Fuzzer {
                 [](const testing::XdsClientTestPeer::ResourceCountLabels&
                        labels,
                    uint64_t count) {
-                  gpr_log(GPR_INFO,
-                          "xds_authority=\"%s\", resource_type=\"%s\", "
-                          "cache_state=\"%s\" count=%" PRIu64,
-                          std::string(labels.xds_authority).c_str(),
-                          std::string(labels.resource_type).c_str(),
-                          std::string(labels.cache_state).c_str(), count);
+                  LOG(INFO) << "xds_authority=\"" << labels.xds_authority
+                            << "\", resource_type=\"" << labels.resource_type
+                            << "\", cache_state=\"" << labels.cache_state
+                            << "\" count=" << count;
                 });
         break;
       case xds_client_fuzzer::Action::kReportServerConnections:
         testing::XdsClientTestPeer(xds_client_.get())
             .TestReportServerConnections(
                 [](absl::string_view xds_server, bool connected) {
-                  gpr_log(GPR_INFO, "xds_server=\"%s\" connected=%d",
-                          std::string(xds_server).c_str(), connected);
+                  LOG(INFO) << "xds_server=\"" << xds_server
+                            << "\" connected=" << connected;
                 });
         break;
       case xds_client_fuzzer::Action::kTriggerConnectionFailure:
@@ -174,26 +192,24 @@ class Fuzzer {
         std::shared_ptr<const typename ResourceType::ResourceType> resource,
         RefCountedPtr<XdsClient::ReadDelayHandle> /* read_delay_handle */)
         override {
-      gpr_log(GPR_INFO, "==> OnResourceChanged(%s %s): %s",
-              std::string(ResourceType::Get()->type_url()).c_str(),
-              resource_name_.c_str(), resource->ToString().c_str());
+      LOG(INFO) << "==> OnResourceChanged(" << ResourceType::Get()->type_url()
+                << " " << resource_name_ << "): " << resource->ToString();
     }
 
     void OnError(
         absl::Status status,
         RefCountedPtr<XdsClient::ReadDelayHandle> /* read_delay_handle */)
         override {
-      gpr_log(GPR_INFO, "==> OnError(%s %s): %s",
-              std::string(ResourceType::Get()->type_url()).c_str(),
-              resource_name_.c_str(), status.ToString().c_str());
+      LOG(INFO) << "==> OnError(" << ResourceType::Get()->type_url() << " "
+                << resource_name_ << "): " << status;
     }
 
     void OnResourceDoesNotExist(
         RefCountedPtr<XdsClient::ReadDelayHandle> /* read_delay_handle */)
         override {
-      gpr_log(GPR_INFO, "==> OnResourceDoesNotExist(%s %s)",
-              std::string(ResourceType::Get()->type_url()).c_str(),
-              resource_name_.c_str());
+      LOG(INFO) << "==> OnResourceDoesNotExist("
+                << ResourceType::Get()->type_url() << " " << resource_name_
+                << ")";
     }
 
    private:
@@ -208,9 +224,9 @@ class Fuzzer {
   template <typename WatcherType>
   void StartWatch(std::map<std::string, std::set<WatcherType*>>* watchers,
                   std::string resource_name) {
-    gpr_log(GPR_INFO, "### StartWatch(%s %s)",
-            std::string(WatcherType::ResourceType::Get()->type_url()).c_str(),
-            resource_name.c_str());
+    LOG(INFO) << "### StartWatch("
+              << WatcherType::ResourceType::Get()->type_url() << " "
+              << resource_name << ")";
     auto watcher = MakeRefCounted<WatcherType>(resource_name);
     (*watchers)[resource_name].insert(watcher.get());
     WatcherType::ResourceType::Get()->StartWatch(
@@ -220,9 +236,9 @@ class Fuzzer {
   template <typename WatcherType>
   void StopWatch(std::map<std::string, std::set<WatcherType*>>* watchers,
                  std::string resource_name) {
-    gpr_log(GPR_INFO, "### StopWatch(%s %s)",
-            std::string(WatcherType::ResourceType::Get()->type_url()).c_str(),
-            resource_name.c_str());
+    LOG(INFO) << "### StopWatch("
+              << WatcherType::ResourceType::Get()->type_url() << " "
+              << resource_name << ")";
     auto& watchers_set = (*watchers)[resource_name];
     auto it = watchers_set.begin();
     if (it == watchers_set.end()) return;
@@ -252,8 +268,8 @@ class Fuzzer {
 
   void TriggerConnectionFailure(const std::string& authority,
                                 absl::Status status) {
-    gpr_log(GPR_INFO, "### TriggerConnectionFailure(%s): %s", authority.c_str(),
-            status.ToString().c_str());
+    LOG(INFO) << "### TriggerConnectionFailure(" << authority
+              << "): " << status;
     const auto* xds_server = GetServer(authority);
     if (xds_server == nullptr) return;
     transport_factory_->TriggerConnectionFailure(*xds_server,
@@ -278,8 +294,7 @@ class Fuzzer {
     if (xds_server == nullptr) return nullptr;
     const char* method = StreamIdMethod(stream_id);
     if (method == nullptr) return nullptr;
-    return transport_factory_->WaitForStream(*xds_server, method,
-                                             absl::ZeroDuration());
+    return transport_factory_->WaitForStream(*xds_server, method);
   }
 
   static std::string StreamIdString(
@@ -290,14 +305,14 @@ class Fuzzer {
 
   void ReadMessageFromClient(const xds_client_fuzzer::StreamId& stream_id,
                              bool ok) {
-    gpr_log(GPR_INFO, "### ReadMessageFromClient(%s): %s",
-            StreamIdString(stream_id).c_str(), ok ? "true" : "false");
+    LOG(INFO) << "### ReadMessageFromClient(" << StreamIdString(stream_id)
+              << "): " << (ok ? "true" : "false");
     auto stream = GetStream(stream_id);
     if (stream == nullptr) return;
-    gpr_log(GPR_INFO, "    stream=%p", stream.get());
-    auto message = stream->WaitForMessageFromClient(absl::ZeroDuration());
+    LOG(INFO) << "    stream=" << stream.get();
+    auto message = stream->WaitForMessageFromClient();
     if (message.has_value()) {
-      gpr_log(GPR_INFO, "    completing send_message");
+      LOG(INFO) << "    completing send_message";
       stream->CompleteSendMessageFromClient(ok);
     }
   }
@@ -305,26 +320,26 @@ class Fuzzer {
   void SendMessageToClient(
       const xds_client_fuzzer::StreamId& stream_id,
       const envoy::service::discovery::v3::DiscoveryResponse& response) {
-    gpr_log(GPR_INFO, "### SendMessageToClient(%s)",
-            StreamIdString(stream_id).c_str());
+    LOG(INFO) << "### SendMessageToClient(" << StreamIdString(stream_id) << ")";
     auto stream = GetStream(stream_id);
     if (stream == nullptr) return;
-    gpr_log(GPR_INFO, "    stream=%p", stream.get());
+    LOG(INFO) << "    stream=" << stream.get();
     stream->SendMessageToClient(response.SerializeAsString());
   }
 
   void SendStatusToClient(const xds_client_fuzzer::StreamId& stream_id,
                           absl::Status status) {
-    gpr_log(GPR_INFO, "### SendStatusToClient(%s): %s",
-            StreamIdString(stream_id).c_str(), status.ToString().c_str());
+    LOG(INFO) << "### SendStatusToClient(" << StreamIdString(stream_id)
+              << "): " << status;
     auto stream = GetStream(stream_id);
     if (stream == nullptr) return;
-    gpr_log(GPR_INFO, "    stream=%p", stream.get());
+    LOG(INFO) << "    stream=" << stream.get();
     stream->MaybeSendStatusToClient(std::move(status));
   }
 
+  std::shared_ptr<FuzzingEventEngine> event_engine_;
   RefCountedPtr<XdsClient> xds_client_;
-  FakeXdsTransportFactory* transport_factory_;
+  RefCountedPtr<FakeXdsTransportFactory> transport_factory_;
 
   // Maps of currently active watchers for each resource type, keyed by
   // resource name.
@@ -338,11 +353,10 @@ class Fuzzer {
 
 bool squelch = true;
 
-DEFINE_PROTO_FUZZER(const xds_client_fuzzer::Message& message) {
-  grpc_init();
-  grpc_core::Fuzzer fuzzer(message.bootstrap());
+DEFINE_PROTO_FUZZER(const xds_client_fuzzer::Msg& message) {
+  grpc_core::Fuzzer fuzzer(message.bootstrap(),
+                           message.fuzzing_event_engine_actions());
   for (int i = 0; i < message.actions_size(); i++) {
     fuzzer.Act(message.actions(i));
   }
-  grpc_shutdown();
 }

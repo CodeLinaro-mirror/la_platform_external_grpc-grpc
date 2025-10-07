@@ -24,6 +24,8 @@
 #ifdef GRPC_POSIX_SOCKET_TCP_SERVER_UTILS_COMMON
 
 #include <errno.h>
+#include <grpc/support/alloc.h>
+#include <grpc/support/sync.h>
 #include <limits.h>
 #include <stdio.h>
 #include <string.h>
@@ -32,19 +34,15 @@
 #include <string>
 
 #include "absl/log/check.h"
+#include "absl/log/log.h"
 #include "absl/strings/str_cat.h"
-
-#include <grpc/support/alloc.h>
-#include <grpc/support/log.h>
-#include <grpc/support/sync.h>
-
 #include "src/core/lib/address_utils/sockaddr_utils.h"
-#include "src/core/lib/gprpp/crash.h"
 #include "src/core/lib/iomgr/error.h"
 #include "src/core/lib/iomgr/sockaddr.h"
 #include "src/core/lib/iomgr/tcp_server_utils_posix.h"
 #include "src/core/lib/iomgr/unix_sockets_posix.h"
 #include "src/core/lib/iomgr/vsock.h"
+#include "src/core/util/crash.h"
 
 #define MIN_SAFE_ACCEPT_QUEUE_SIZE 100
 
@@ -72,10 +70,8 @@ static void init_max_accept_queue_size(void) {
   s_max_accept_queue_size = n;
 
   if (s_max_accept_queue_size < MIN_SAFE_ACCEPT_QUEUE_SIZE) {
-    gpr_log(GPR_INFO,
-            "Suspiciously small accept queue (%d) will probably lead to "
-            "connection drops",
-            s_max_accept_queue_size);
+    LOG(INFO) << "Suspiciously small accept queue (" << s_max_accept_queue_size
+              << ") will probably lead to connection drops";
   }
 }
 
@@ -221,7 +217,7 @@ grpc_error_handle grpc_tcp_server_prepare_socket(
   err = grpc_set_socket_zerocopy(fd);
   if (!err.ok()) {
     // it's not fatal, so just log it.
-    gpr_log(GPR_DEBUG, "Node does not support SO_ZEROCOPY, continuing.");
+    VLOG(2) << "Node does not support SO_ZEROCOPY, continuing.";
   }
 #endif
   err = grpc_set_socket_nonblocking(fd, 1);

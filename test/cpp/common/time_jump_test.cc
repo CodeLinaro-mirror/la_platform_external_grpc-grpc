@@ -16,6 +16,8 @@
 //
 //
 
+#include <grpc/grpc.h>
+#include <gtest/gtest.h>
 #include <spawn.h>
 
 #include <sstream>
@@ -23,21 +25,16 @@
 #include <thread>
 #include <vector>
 
-#include <gtest/gtest.h>
-
 #include "absl/log/check.h"
+#include "absl/log/log.h"
 #include "absl/time/time.h"
-
-#include <grpc/grpc.h>
-#include <grpc/support/log.h>
-
-#include "src/core/lib/gprpp/crash.h"
-#include "src/core/lib/gprpp/sync.h"
 #include "src/core/lib/iomgr/closure.h"
 #include "src/core/lib/iomgr/error.h"
 #include "src/core/lib/iomgr/exec_ctx.h"
 #include "src/core/lib/iomgr/timer.h"
 #include "src/core/lib/iomgr/timer_manager.h"
+#include "src/core/util/crash.h"
+#include "src/core/util/sync.h"
 #include "test/core/test_util/test_config.h"
 
 extern char** environ;
@@ -106,7 +103,7 @@ TEST_P(TimeJumpTest, TimerRunning) {
   gpr_sleep_until(grpc_timeout_milliseconds_to_deadline(kWaitTimeMs));
   // We expect 1 wakeup/sec when there are not timer expiries
   int64_t wakeups = grpc_timer_manager_get_wakeups_testonly();
-  gpr_log(GPR_DEBUG, "wakeups: %" PRId64 "", wakeups);
+  VLOG(2) << "wakeups: " << wakeups;
   CHECK_LE(wakeups, 3);
   grpc_timer_cancel(&timer);
 }
@@ -126,8 +123,8 @@ TEST_P(TimeJumpTest, TimedWait) {
     bool timedout = cond.WaitWithTimeout(&mu, absl::Milliseconds(kWaitTimeMs));
     gpr_timespec after = gpr_now(GPR_CLOCK_MONOTONIC);
     int32_t elapsed_ms = gpr_time_to_millis(gpr_time_sub(after, before));
-    gpr_log(GPR_DEBUG, "After wait, timedout = %d elapsed_ms = %d", timedout,
-            elapsed_ms);
+    VLOG(2) << "After wait, timedout = " << timedout
+            << " elapsed_ms = " << elapsed_ms;
     CHECK_EQ(timedout, 1);
     CHECK(1 == gpr_time_similar(gpr_time_sub(after, before),
                                 gpr_time_from_millis(kWaitTimeMs, GPR_TIMESPAN),
@@ -137,7 +134,7 @@ TEST_P(TimeJumpTest, TimedWait) {
   }
   // We expect 1 wakeup/sec when there are not timer expiries
   int64_t wakeups = grpc_timer_manager_get_wakeups_testonly();
-  gpr_log(GPR_DEBUG, "wakeups: %" PRId64 "", wakeups);
+  VLOG(2) << "wakeups: " << wakeups;
   CHECK_LE(wakeups, 3);
 }
 

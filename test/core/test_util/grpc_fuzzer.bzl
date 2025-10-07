@@ -16,7 +16,7 @@
 Includes fuzzer rules.
 """
 
-load("//bazel:grpc_build_system.bzl", "grpc_cc_test", "grpc_proto_library")
+load("//bazel:grpc_build_system.bzl", "grpc_cc_proto_library", "grpc_cc_test", "grpc_internal_proto_library")
 
 def grpc_fuzzer(name, corpus, owner = "grpc", srcs = [], tags = [], external_deps = [], deps = [], data = [], size = "large", **kwargs):
     """Instantiates a fuzzer test.
@@ -54,7 +54,20 @@ def grpc_fuzzer(name, corpus, owner = "grpc", srcs = [], tags = [], external_dep
         **kwargs
     )
 
-def grpc_proto_fuzzer(name, corpus, proto, owner = "grpc", proto_deps = [], external_deps = [], srcs = [], tags = [], deps = [], data = [], size = "large", **kwargs):
+def grpc_proto_fuzzer(
+        name,
+        corpus,
+        proto,
+        owner = "grpc",  # @unused
+        proto_deps = [],
+        external_deps = [],
+        srcs = [],
+        tags = [],
+        deps = [],
+        end2end_fuzzer = False,  # @unused
+        data = [],
+        size = "large",
+        **kwargs):
     """Instantiates a protobuf mutator fuzzer test.
 
     Args:
@@ -62,8 +75,9 @@ def grpc_proto_fuzzer(name, corpus, proto, owner = "grpc", proto_deps = [], exte
         corpus: The corpus for the test.
         proto: The proto for the test. If empty, it assumes the proto dependency
                 is already included in the target deps. Otherwise it creates a
-                new grpc_proto_library with name "_{name}_proto" and makes the
-                fuzz target depend on it.
+                new proto_library with name "_{name}_proto" and
+                cc_proto_library with name "_{name}_cc_proto" and makes the
+                fuzz target depend on the latter.
         proto_deps: Deps for proto. Only used if proto is not empty.
         external_deps: External deps.
         srcs: The source files for the test.
@@ -72,8 +86,11 @@ def grpc_proto_fuzzer(name, corpus, proto, owner = "grpc", proto_deps = [], exte
         size: The size of the test.
         tags: The tags for the test.
         owner: The owning team of the test (for auto-bug-filing).
+        end2end_fuzzer: Flag to enable end2end fuzzers.
+                        This is currently False and ignored
         **kwargs: Other arguments to supply to the test.
     """
+
     CORPUS_DIR = native.package_name() + "/" + corpus
     deps = deps + ["@com_google_libprotobuf_mutator//:libprotobuf_mutator"]
 
@@ -82,13 +99,17 @@ def grpc_proto_fuzzer(name, corpus, proto, owner = "grpc", proto_deps = [], exte
 
     if proto != None:
         PROTO_LIBRARY = "_%s_proto" % name
-        grpc_proto_library(
+        grpc_internal_proto_library(
             name = PROTO_LIBRARY,
             srcs = [proto],
             deps = proto_deps,
-            has_services = False,
         )
-        deps = deps + [PROTO_LIBRARY]
+        CC_PROTO_LIBRARY = "_%s_cc_proto" % name
+        grpc_cc_proto_library(
+            name = CC_PROTO_LIBRARY,
+            deps = [PROTO_LIBRARY],
+        )
+        deps = deps + [CC_PROTO_LIBRARY]
 
     grpc_cc_test(
         name = name,

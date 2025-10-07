@@ -18,16 +18,15 @@
 
 #include "src/core/tsi/ssl/session_cache/ssl_session_cache.h"
 
-#include "absl/log/check.h"
-
-#include <grpc/support/log.h>
 #include <grpc/support/port_platform.h>
 #include <grpc/support/string_util.h>
 
-#include "src/core/lib/gprpp/crash.h"
-#include "src/core/lib/gprpp/sync.h"
+#include "absl/log/check.h"
+#include "absl/log/log.h"
 #include "src/core/lib/slice/slice_internal.h"
 #include "src/core/tsi/ssl/session_cache/ssl_session.h"
+#include "src/core/util/crash.h"
+#include "src/core/util/sync.h"
 
 namespace tsi {
 
@@ -64,9 +63,8 @@ class SslSessionLRUCache::Node {
 
 SslSessionLRUCache::SslSessionLRUCache(size_t capacity) : capacity_(capacity) {
   if (capacity == 0) {
-    gpr_log(
-        GPR_ERROR,
-        "SslSessionLRUCache capacity is zero. SSL sessions cannot be resumed.");
+    LOG(ERROR) << "SslSessionLRUCache capacity is zero. SSL sessions cannot be "
+                  "resumed.";
   }
 }
 
@@ -100,7 +98,7 @@ SslSessionLRUCache::Node* SslSessionLRUCache::FindLocked(
 
 void SslSessionLRUCache::Put(const char* key, SslSessionPtr session) {
   if (session == nullptr) {
-    gpr_log(GPR_ERROR, "Attempted to put null SSL session in session cache.");
+    LOG(ERROR) << "Attempted to put null SSL session in session cache.";
     return;
   }
   grpc_core::MutexLock lock(&lock_);

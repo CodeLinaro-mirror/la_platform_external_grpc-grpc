@@ -15,7 +15,7 @@
 licenses(["notice"])
 
 package(
-    default_visibility = ["//examples/cpp/otel:__subpackages__"],
+    default_visibility = ["//examples/cpp:__subpackages__"],
 )
 
 cc_library(
@@ -26,6 +26,7 @@ cc_library(
     deps = [
         "//:grpc++",
         "//:grpc++_reflection",
+        "//:grpc++_xds_server",
         "//examples/protos:helloworld_cc_grpc",
         "@io_opentelemetry_cpp//sdk/src/metrics",
     ],

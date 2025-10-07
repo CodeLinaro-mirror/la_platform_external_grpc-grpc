@@ -19,19 +19,11 @@
 #ifndef GRPCPP_IMPL_CALL_OP_SET_H
 #define GRPCPP_IMPL_CALL_OP_SET_H
 
-#include <cstring>
-#include <map>
-#include <memory>
-
-#include "absl/log/absl_check.h"
-#include "absl/log/absl_log.h"
-
 #include <grpc/grpc.h>
 #include <grpc/impl/compression_types.h>
 #include <grpc/impl/grpc_types.h>
 #include <grpc/slice.h>
 #include <grpc/support/alloc.h>
-#include <grpc/support/log.h>
 #include <grpcpp/client_context.h>
 #include <grpcpp/completion_queue.h>
 #include <grpcpp/impl/call.h>
@@ -45,6 +37,13 @@
 #include <grpcpp/support/config.h>
 #include <grpcpp/support/slice.h>
 #include <grpcpp/support/string_ref.h>
+
+#include <cstring>
+#include <map>
+#include <memory>
+
+#include "absl/log/absl_check.h"
+#include "absl/log/absl_log.h"
 
 namespace grpc {
 
@@ -772,7 +771,9 @@ class CallOpRecvInitialMetadata {
 class CallOpClientRecvStatus {
  public:
   CallOpClientRecvStatus()
-      : recv_status_(nullptr), debug_error_string_(nullptr) {}
+      : metadata_map_(nullptr),
+        recv_status_(nullptr),
+        debug_error_string_(nullptr) {}
 
   void ClientRecvStatus(grpc::ClientContext* context, Status* status) {
     client_context_ = context;

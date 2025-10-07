@@ -25,13 +25,14 @@ END2END_TEST_DATA = [
     "//src/core/tsi/test_creds:server1.pem",
 ]
 
-def grpc_core_end2end_test(name, shard_count = 10, tags = []):
+def grpc_core_end2end_test(name, shard_count = 10, tags = [], flaky = False):
     """Generate one core end2end test
 
     Args:
         name: name of the test, must correspond to a "test/name.cc" file
         shard_count: per bazel
         tags: per bazel
+        flaky: per bazel
     """
 
     if len(name) > 60:
@@ -42,6 +43,9 @@ def grpc_core_end2end_test(name, shard_count = 10, tags = []):
         testonly = 1,
         srcs = [
             "tests/%s.cc" % name,
+        ],
+        external_deps = [
+            "absl/log:log",
         ],
         deps = [
             "cq_verifier",
@@ -60,7 +64,6 @@ def grpc_core_end2end_test(name, shard_count = 10, tags = []):
             "//:grpc_security_base",
             "//:grpc_trace",
             "//:grpc_unsecure",
-            "//:legacy_context",
             "//:orphanable",
             "//:promise",
             "//:ref_counted_ptr",
@@ -90,6 +93,7 @@ def grpc_core_end2end_test(name, shard_count = 10, tags = []):
             "//test/core/test_util:grpc_test_util",
             "//test/core/test_util:test_lb_policies",
         ],
+        alwayslink = 1,
     )
 
     grpc_cc_test(
@@ -109,7 +113,8 @@ def grpc_core_end2end_test(name, shard_count = 10, tags = []):
             "end2end_test_main",
             "%s_library" % name,
         ],
-        tags = ["core_end2end_test"] + tags,
+        tags = ["core_end2end_test", "thready_tsan"] + tags,
+        flaky = flaky,
     )
 
     grpc_proto_fuzzer(
