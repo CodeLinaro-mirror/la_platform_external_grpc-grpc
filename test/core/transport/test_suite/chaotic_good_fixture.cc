@@ -27,17 +27,36 @@ TRANSPORT_FIXTURE(ChaoticGood) {
   auto channel_args =
       ChannelArgs()
           .SetObject(resource_quota)
-          .SetObject(std::static_pointer_cast<EventEngine>(event_engine));
+          .SetObject(
+              std::static_pointer_cast<
+                  grpc_event_engine::experimental::EventEngine>(event_engine));
+  chaotic_good::Config client_config(channel_args);
+  chaotic_good::Config server_config(channel_args);
+  client_config.ServerAddPendingDataEndpoint(chaotic_good::ImmediateConnection(
+      "foo", std::move(data_endpoints.client)));
+  server_config.ServerAddPendingDataEndpoint(chaotic_good::ImmediateConnection(
+      "foo", std::move(data_endpoints.server)));
   auto client_transport =
       MakeOrphanable<chaotic_good::ChaoticGoodClientTransport>(
-          std::move(control_endpoints.client),
-          chaotic_good::OneDataEndpoint(std::move(data_endpoints.client)),
-          ChannelArgs().SetObject(resource_quota), event_engine);
+          channel_args,
+          MakeOrphanable<chaotic_good::TcpFrameTransport>(
+              client_config.MakeTcpFrameTransportOptions(),
+              std::move(control_endpoints.client),
+              client_config.TakePendingDataEndpoints(),
+              channel_args.GetObjectRef<
+                  grpc_event_engine::experimental::EventEngine>()),
+          client_config.MakeMessageChunker());
   auto server_transport =
       MakeOrphanable<chaotic_good::ChaoticGoodServerTransport>(
-          channel_args, std::move(control_endpoints.server),
-          chaotic_good::OneDataEndpoint(std::move(data_endpoints.server)),
-          event_engine);
+          channel_args,
+          MakeOrphanable<chaotic_good::TcpFrameTransport>(
+              server_config.MakeTcpFrameTransportOptions(),
+              std::move(control_endpoints.server),
+              server_config.TakePendingDataEndpoints(),
+              channel_args.GetObjectRef<
+                  grpc_event_engine::experimental::EventEngine>()),
+          server_config.MakeMessageChunker());
+
   return ClientAndServerTransportPair{std::move(client_transport),
                                       std::move(server_transport)};
 }

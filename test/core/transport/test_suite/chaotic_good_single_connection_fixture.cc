@@ -22,20 +22,34 @@ TRANSPORT_FIXTURE(ChaoticGoodSingleConnection) {
   auto resource_quota = MakeResourceQuota("test");
   EndpointPair control_endpoints =
       CreateEndpointPair(event_engine.get(), resource_quota.get(), 1234);
-  EndpointPair data_endpoints =
-      CreateEndpointPair(event_engine.get(), resource_quota.get(), 4321);
   auto channel_args =
       ChannelArgs()
           .SetObject(resource_quota)
-          .SetObject(std::static_pointer_cast<EventEngine>(event_engine));
+          .SetObject(
+              std::static_pointer_cast<
+                  grpc_event_engine::experimental::EventEngine>(event_engine));
+  chaotic_good::Config client_config(channel_args);
+  chaotic_good::Config server_config(channel_args);
   auto client_transport =
       MakeOrphanable<chaotic_good::ChaoticGoodClientTransport>(
-          std::move(control_endpoints.client), std::vector<PromiseEndpoint>{},
-          ChannelArgs().SetObject(resource_quota), event_engine);
+          channel_args,
+          MakeOrphanable<chaotic_good::TcpFrameTransport>(
+              client_config.MakeTcpFrameTransportOptions(),
+              std::move(control_endpoints.client),
+              client_config.TakePendingDataEndpoints(),
+              channel_args.GetObjectRef<
+                  grpc_event_engine::experimental::EventEngine>()),
+          client_config.MakeMessageChunker());
   auto server_transport =
       MakeOrphanable<chaotic_good::ChaoticGoodServerTransport>(
-          channel_args, std::move(control_endpoints.server),
-          std::vector<PromiseEndpoint>{}, event_engine);
+          channel_args,
+          MakeOrphanable<chaotic_good::TcpFrameTransport>(
+              server_config.MakeTcpFrameTransportOptions(),
+              std::move(control_endpoints.server),
+              server_config.TakePendingDataEndpoints(),
+              channel_args.GetObjectRef<
+                  grpc_event_engine::experimental::EventEngine>()),
+          server_config.MakeMessageChunker());
   return ClientAndServerTransportPair{std::move(client_transport),
                                       std::move(server_transport)};
 }
